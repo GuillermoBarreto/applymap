@@ -1,0 +1,21 @@
+# Copy to ~/.applymap/profile.yaml and fill in your REAL details.
+# applymap scores postings and drafts letters from this file — keep it honest.
+name: Your Name
+headline: B.S. Software Engineering student, IT support technician
+location: Chicago, IL
+target_roles:
+  - Software Development Engineer
+  - Backend Developer
+skills:
+  - python
+  - javascript
+  - typescript
+  - react
+  - sql
+  - git
+  - linux
+  - docker
+  - fastapi
+experience:
+  - Resolved thousands of support tickets across switches, routers, and access points
+  - Automated routine tasks with Python scripts
