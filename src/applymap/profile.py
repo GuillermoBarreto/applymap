@@ -1,0 +1,47 @@
+"""Load the user's profile: skills, background, and target roles.
+
+The profile lives outside the repo (default: ~/.applymap/profile.yaml) so
+personal details are never committed. See examples/profile.example.yaml.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any, Dict, List
+
+import yaml
+
+DEFAULT_PROFILE_PATH = Path(os.environ.get("APPLYMAP_PROFILE", "~/.applymap/profile.yaml")).expanduser()
+
+
+def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
+    """Load a profile YAML file and return a normalized dict."""
+    resolved = Path(path).expanduser() if path else DEFAULT_PROFILE_PATH
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"Profile not found at {resolved}. Run `applymap init-profile` to create one, "
+            "or set APPLYMAP_PROFILE to its location."
+        )
+    with open(resolved, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    return normalize(data)
+
+
+def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize raw profile data into the fields applymap expects."""
+    profile = {
+        "name": data.get("name", ""),
+        "headline": data.get("headline", ""),
+        "skills": [s.strip().lower() for s in data.get("skills", []) if s],
+        "experience": [str(e) for e in data.get("experience", [])],
+        "target_roles": [str(r) for r in data.get("target_roles", [])],
+        "location": data.get("location", ""),
+    }
+    # De-duplicate skills while preserving order.
+    profile["skills"] = list(dict.fromkeys(profile["skills"]))
+    return profile
+
+
+def skill_list(profile: Dict[str, Any]) -> List[str]:
+    return list(profile.get("skills", []))
