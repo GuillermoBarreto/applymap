@@ -1,0 +1,14 @@
+Backend Software Engineer — Example Corp
+
+We are looking for a backend engineer to join our platform team.
+
+Requirements:
+- 1+ years of experience with Python and SQL
+- Familiarity with Docker and CI/CD pipelines
+- Experience with React is a plus
+- Knowledge of Kubernetes preferred
+
+Responsibilities:
+- Build and maintain REST APIs with FastAPI
+- Write unit tests with pytest
+- Collaborate with the frontend team in an agile environment
