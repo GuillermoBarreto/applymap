@@ -25,7 +25,31 @@ SKILL_TOKENS = {
 }
 
 
+# Alternate names that should count as the same skill on both sides of a
+# match, e.g. a posting asking for "k8s" matches a profile listing
+# "kubernetes". Canonical forms are members of SKILL_TOKENS.
+SKILL_ALIASES = {
+    "k8s": "kubernetes",
+    "js": "javascript",
+    "ts": "typescript",
+    "postgres": "postgresql",
+    "node.js": "node",
+    "next.js": "nextjs",
+    "scikit learn": "scikit-learn",
+    "ci cd": "ci/cd",
+    "github actions": "github actions",
+}
+
+
+def canonicalize(skill: str) -> str:
+    """Map a skill to its canonical form, resolving aliases."""
+    key = skill.strip().lower()
+    return SKILL_ALIASES.get(key, key)
+
+
 def tokenize(text: str) -> Set[str]:
+    """Lowercase alphanumeric-ish tokens of the given text."""
+    return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
     """Lowercase alphanumeric-ish tokens of the given text."""
     return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
 
@@ -34,27 +58,34 @@ def extract_required_skills(posting: str) -> List[str]:
     """Find recognizable skill tokens inside a job posting.
 
     Multi-word tokens (e.g. "spring boot") match against the raw text,
-    single-word tokens match against tokenized words.
+    single-word tokens match against tokenized words. Aliases (e.g. "k8s")
+    are resolved to their canonical form ("kubernetes").
     """
     lowered = posting.lower()
-    tokens = tokenize(posting)
+    # Strip sentence-final dots: "TS." must tokenize as "ts", not "ts.".
+    tokens = {t.rstrip(".") for t in tokenize(posting)}
     found = []
-    for skill in sorted(SKILL_TOKENS):
+    # Scan both canonical tokens and known aliases; aliases resolve to
+    # their canonical form below.
+    for skill in sorted(SKILL_TOKENS | set(SKILL_ALIASES)):
         if " " in skill or "/" in skill or "." in skill:
             if skill in lowered:
                 found.append(skill)
         elif skill in tokens:
             found.append(skill)
-    return found
+    # Resolve aliases and de-duplicate, keeping sorted order.
+    return sorted({canonicalize(s) for s in found})
 
 
 def match(profile_skills: List[str], required: List[str]) -> Dict[str, object]:
     """Compare profile skills against required skills.
 
-    Returns matched and missing skills plus a 0-100 fit score.
+    Returns matched and missing skills plus a 0-100 fit score. Skill
+    aliases (see SKILL_ALIASES) resolve on both sides, so a profile with
+    "kubernetes" matches a posting asking for "k8s".
     """
-    have = set(profile_skills)
-    req = list(dict.fromkeys(required))  # de-duplicate, keep order
+    have = {canonicalize(s) for s in profile_skills}
+    req = list(dict.fromkeys(canonicalize(s) for s in required))  # de-duplicate, keep order
     matched = [s for s in req if s in have]
     missing = [s for s in req if s not in have]
     score = round(100 * len(matched) / len(req)) if req else 0

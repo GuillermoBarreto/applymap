@@ -49,3 +49,35 @@ def test_rank_postings_orders_best_first():
     assert ranked[0]["label"] == "good-fit"
     assert ranked[1]["label"] == "bad-fit"
     assert ranked[0]["score"] > ranked[1]["score"]
+
+
+def test_extract_resolves_aliases():
+    found = matcher.extract_required_skills("We run k8s in production with a TS frontend.")
+    assert "kubernetes" in found
+    assert "typescript" in found
+    assert "k8s" not in found
+    assert "ts" not in found
+
+
+def test_extract_alias_dedupes():
+    found = matcher.extract_required_skills("Postgres and PostgreSQL required.")
+    assert found == ["postgresql"]
+
+
+def test_match_resolves_aliases_on_both_sides():
+    report = matcher.match(["kubernetes", "javascript"], ["k8s", "js", "go"])
+    assert report["score"] == 67  # 2 of 3
+    assert report["matched"] == ["kubernetes", "javascript"]
+    assert report["missing"] == ["go"]
+
+
+def test_canonicalize_unknown_passes_through():
+    assert matcher.canonicalize("  Python ") == "python"
+    assert matcher.canonicalize("cobol") == "cobol"
+
+
+def test_extract_ignores_sentence_final_dots():
+    found = matcher.extract_required_skills("We need Python, SQL and Docker.")
+    assert "python" in found
+    assert "sql" in found
+    assert "docker" in found
