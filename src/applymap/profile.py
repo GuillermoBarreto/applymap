@@ -33,7 +33,13 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
     profile = {
         "name": data.get("name", ""),
         "headline": data.get("headline", ""),
-        "skills": [s.strip().lower() for s in data.get("skills", []) if s],
+        # Coerce non-string skills (e.g. a bare `123` in YAML) to strings so
+        # a hand-edited profile never crashes the matcher.
+        "skills": [
+            str(s).strip().lower()
+            for s in data.get("skills", [])
+            if s and str(s).strip()
+        ],
         "experience": [str(e) for e in data.get("experience", [])],
         "target_roles": [str(r) for r in data.get("target_roles", [])],
         "location": data.get("location", ""),

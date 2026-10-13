@@ -80,3 +80,86 @@ def test_parser_has_subcommands():
     for cmd in ("init-profile", "analyze", "rank", "cover-letter"):
         assert cmd in subparsers.choices
         assert callable(subparsers.choices[cmd].get_default("func"))
+
+
+def test_rank_csv_export(tmp_path):
+    import csv
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    csv_path = tmp_path / "rank.csv"
+    rc = main(
+        [
+            "rank",
+            str(good),
+            str(bad),
+            "--profile",
+            str(profile_path),
+            "--csv",
+            str(csv_path),
+        ]
+    )
+    assert rc == 0
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 2
+    assert rows[0]["label"] == "good"
+    assert int(rows[0]["score"]) >= int(rows[1]["score"])
+    assert "python" in rows[0]["matched_skills"]
+    assert "kubernetes" in rows[1]["missing_skills"]
+
+
+def test_track_logs_application(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(
+        [
+            "track",
+            str(posting_path),
+            "--profile",
+            str(profile_path),
+            "--company",
+            "Acme",
+            "--role",
+            "Backend Dev",
+        ]
+    )
+    assert rc == 0
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    record = entries[0]
+    assert record["company"] == "Acme"
+    assert record["role"] == "Backend Dev"
+    assert record["status"] == "applied"
+    assert record["score"] == 67  # python + sql of python/sql/kubernetes
+    assert "kubernetes" in record["missing_skills"]
+    assert "Logged application" in capsys.readouterr().out
+
+
+def test_track_appends_to_existing_log(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(json.dumps([{"date": "2026-01-01"}]), encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert len(entries) == 2
+
+
+def test_parser_has_track_subcommand():
+    from applymap.cli import build_parser
+
+    parser = build_parser()
+    subparsers = parser._subparsers._group_actions[0]
+    assert "track" in subparsers.choices
+    assert callable(subparsers.choices["track"].get_default("func"))

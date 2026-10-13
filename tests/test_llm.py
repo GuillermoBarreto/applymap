@@ -79,3 +79,41 @@ def test_draft_cover_letter_never_invents(monkeypatch):
     assert "Never invent" in captured["system"]
     # The profile's real skill must reach the model so the letter is grounded.
     assert "python" in captured["user"]
+
+
+def test_chat_network_failure_raises_runtime_error(monkeypatch):
+    import urllib.error
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=urllib.error.URLError("connection refused"),
+    ):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "API request failed" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+
+
+def test_chat_http_error_raises_runtime_error(monkeypatch):
+    import io
+    import urllib.error
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    err = urllib.error.HTTPError(
+        url="https://example.invalid/v1/chat/completions",
+        code=401,
+        msg="Unauthorized",
+        hdrs={},
+        fp=io.BytesIO(b"{}"),
+    )
+    with mock.patch("urllib.request.urlopen", side_effect=err):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "401" in str(exc)
+            assert "APPLYMAP_API_KEY" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")

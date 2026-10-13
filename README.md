@@ -54,9 +54,21 @@ Missing skills:
 
 ```bash
 applymap rank posting-a.txt posting-b.txt posting-c.txt
+applymap rank posting-*.txt --csv ranking.csv   # also save to a spreadsheet
 ```
 
-4. AI features (optional, need an API key):
+4. Track the jobs you apply to:
+
+```bash
+applymap track posting-a.txt --company "Acme" --role "Backend Engineer"
+```
+
+`track` records the date, company, role, fit score, and status
+(`interested`/`applied`/`interview`/`offer`/`rejected`) in
+`~/.applymap/applications.json` — one JSON list you can open in any editor.
+Set `APPLYMAP_DATA_DIR` to move it elsewhere.
+
+5. AI features (optional, need an API key):
 
 ```bash
 export APPLYMAP_API_KEY="sk-..."                    # OpenAI-compatible key
@@ -70,10 +82,15 @@ applymap cover-letter posting.txt --company "Acme" --role "Backend Engineer" -o 
 The offline analysis (scores, matched/missing skills, ranking) always works
 with no key and no network. Only `cover-letter` and `--ai` call the API.
 
+Skill aliases: the matcher treats common alternate names as the same skill
+— `k8s` counts as `kubernetes`, `js` as `javascript`, `postgres` as
+`postgresql`, and so on — on both the profile and the posting side, so
+equivalent wording never costs you points.
+
 ## Roadmap
 
 - [ ] PDF/DOCX resume parsing so the profile builds itself
-- [ ] `track` command: log applications and follow-up dates
+- [x] `track` command: log applications and follow-up dates
 - [ ] Skill-gap study plans generated from missing skills
 - [ ] Web UI for side-by-side posting comparison
-- [ ] Batch mode: score every posting in a folder, export CSV
+- [x] Batch mode: score several postings, export CSV (`rank --csv`)
