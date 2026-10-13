@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import sys
 from pathlib import Path
@@ -81,7 +82,29 @@ def cmd_rank(args: argparse.Namespace) -> int:
     for r in ranked:
         print(f"{r['score']:>3}/100  {r['label']}  "
               f"({len(r['matched'])}/{len(r['required'])} skills)")
+    if args.csv:
+        _write_rank_csv(args.csv, ranked)
+        print(f"Wrote ranking to {args.csv}")
     return 0
+
+
+def _write_rank_csv(path: str, ranked: list) -> None:
+    """Write ranked posting results to a CSV file for spreadsheets."""
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(
+            ["label", "score", "matched_count", "required_count",
+             "matched_skills", "missing_skills"]
+        )
+        for r in ranked:
+            writer.writerow([
+                r["label"],
+                r["score"],
+                len(r["matched"]),
+                len(r["required"]),
+                "; ".join(r["matched"]),
+                "; ".join(r["missing"]),
+            ])
 
 
 def cmd_cover_letter(args: argparse.Namespace) -> int:
@@ -121,6 +144,8 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("rank", help="Rank several postings by fit score.")
     pr.add_argument("postings", nargs="+", help="Paths to posting text files.")
     pr.add_argument("--profile", default=None)
+    pr.add_argument("--csv", default=None, metavar="PATH",
+                    help="Also write the ranking to a CSV file.")
     pr.set_defaults(func=cmd_rank)
 
     pc = sub.add_parser("cover-letter", help="Draft a tailored cover letter (needs API key).")

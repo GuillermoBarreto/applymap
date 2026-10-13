@@ -80,3 +80,35 @@ def test_parser_has_subcommands():
     for cmd in ("init-profile", "analyze", "rank", "cover-letter"):
         assert cmd in subparsers.choices
         assert callable(subparsers.choices[cmd].get_default("func"))
+
+
+def test_rank_csv_export(tmp_path):
+    import csv
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    csv_path = tmp_path / "rank.csv"
+    rc = main(
+        [
+            "rank",
+            str(good),
+            str(bad),
+            "--profile",
+            str(profile_path),
+            "--csv",
+            str(csv_path),
+        ]
+    )
+    assert rc == 0
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 2
+    assert rows[0]["label"] == "good"
+    assert int(rows[0]["score"]) >= int(rows[1]["score"])
+    assert "python" in rows[0]["matched_skills"]
+    assert "kubernetes" in rows[1]["missing_skills"]
+
+
