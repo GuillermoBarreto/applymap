@@ -31,3 +31,8 @@ def test_load_profile_reads_yaml(tmp_path):
 def test_load_profile_missing_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         profile_mod.load_profile(tmp_path / "nope.yaml")
+
+
+def test_normalize_coerces_non_string_skills():
+    norm = profile_mod.normalize({"skills": ["Python", 123, None, "   ", ""]})
+    assert norm["skills"] == ["python", "123"]
