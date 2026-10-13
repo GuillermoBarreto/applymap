@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
 
@@ -53,8 +54,20 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(
+            f"API request failed with HTTP {exc.code} "
+            f"({exc.reason}). Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
+            "and your network connection."
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"API request failed: {exc.reason}. Check APPLYMAP_API_BASE "
+            "and your network connection."
+        ) from exc
     try:
         return body["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError) as exc:
