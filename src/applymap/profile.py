@@ -25,6 +25,11 @@ def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
         )
     with open(resolved, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"Profile at {resolved} must be a YAML mapping of profile fields, "
+            f"but contains {type(data).__name__}."
+        )
     return normalize(data)
 
 
