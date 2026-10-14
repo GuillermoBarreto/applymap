@@ -81,3 +81,11 @@ def test_extract_ignores_sentence_final_dots():
     assert "python" in found
     assert "sql" in found
     assert "docker" in found
+
+
+def test_tokenize_keeps_tech_tokens_and_lowercases():
+    tokens = matcher.tokenize("Python, Node.js and C++ devs wanted.")
+    assert "python" in tokens
+    assert "node.js" in tokens
+    assert "c++" in tokens
+    assert "Python" not in tokens

@@ -117,3 +117,17 @@ def test_chat_http_error_raises_runtime_error(monkeypatch):
             assert "APPLYMAP_API_KEY" in str(exc)
         else:
             raise AssertionError("expected RuntimeError")
+
+
+def test_chat_null_content_raises_runtime_error(monkeypatch):
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    with mock.patch(
+        "urllib.request.urlopen",
+        return_value=_FakeResponse({"choices": [{"message": {"content": None}}]}),
+    ):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "Unexpected API response" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")

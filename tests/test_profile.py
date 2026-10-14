@@ -36,3 +36,10 @@ def test_load_profile_missing_raises(tmp_path):
 def test_normalize_coerces_non_string_skills():
     norm = profile_mod.normalize({"skills": ["Python", 123, None, "   ", ""]})
     assert norm["skills"] == ["python", "123"]
+
+
+def test_load_profile_rejects_non_mapping_yaml(tmp_path):
+    path = tmp_path / "profile.yaml"
+    path.write_text("- just\n- a\n- list\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="must be a YAML mapping"):
+        profile_mod.load_profile(path)

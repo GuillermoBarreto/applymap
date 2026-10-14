@@ -163,3 +163,84 @@ def test_parser_has_track_subcommand():
     subparsers = parser._subparsers._group_actions[0]
     assert "track" in subparsers.choices
     assert callable(subparsers.choices["track"].get_default("func"))
+
+
+def _seed_applications_log(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied"},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    return log
+
+
+def test_applications_lists_newest_first(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["applications"])
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if "/100" in l]
+    assert len(lines) == 2
+    assert "Globex" in lines[0]  # newest first
+    assert "Acme" in lines[1]
+
+
+def test_applications_filters_by_status(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["applications", "--status", "interview"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Globex" in out
+    assert "Acme" not in out
+    assert "1 application(s) tracked." in out
+
+
+def test_applications_empty_log_message(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    rc = main(["applications"])
+    assert rc == 0
+    assert "No applications tracked yet" in capsys.readouterr().out
+
+
+def test_applications_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text("{not valid json", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["applications"])
+    assert rc == 1
+    assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_applications_non_list_log_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text('{"oops": "not a list"}', encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["applications"])
+    assert rc == 1
+    assert "should be a JSON list" in capsys.readouterr().err
+
+
+def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text("{corrupted", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "not valid JSON" in capsys.readouterr().err

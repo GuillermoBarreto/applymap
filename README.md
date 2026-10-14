@@ -68,6 +68,13 @@ applymap track posting-a.txt --company "Acme" --role "Backend Engineer"
 `~/.applymap/applications.json` — one JSON list you can open in any editor.
 Set `APPLYMAP_DATA_DIR` to move it elsewhere.
 
+List what you've applied to (newest first), optionally filtered by status:
+
+```bash
+applymap applications
+applymap applications --status interview
+```
+
 5. AI features (optional, need an API key):
 
 ```bash
@@ -91,6 +98,7 @@ equivalent wording never costs you points.
 
 - [ ] PDF/DOCX resume parsing so the profile builds itself
 - [x] `track` command: log applications and follow-up dates
+- [x] `applications` command: view tracked applications, filter by status
 - [ ] Skill-gap study plans generated from missing skills
 - [ ] Web UI for side-by-side posting comparison
 - [x] Batch mode: score several postings, export CSV (`rank --csv`)

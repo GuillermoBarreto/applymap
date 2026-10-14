@@ -50,8 +50,6 @@ def canonicalize(skill: str) -> str:
 def tokenize(text: str) -> Set[str]:
     """Lowercase alphanumeric-ish tokens of the given text."""
     return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
-    """Lowercase alphanumeric-ish tokens of the given text."""
-    return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
 
 
 def extract_required_skills(posting: str) -> List[str]:
