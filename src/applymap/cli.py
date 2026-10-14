@@ -131,9 +131,7 @@ def cmd_track(args: argparse.Namespace) -> int:
         "status": args.status,
     }
     TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
-    entries = []
-    if TRACKING_PATH.exists():
-        entries = json.loads(TRACKING_PATH.read_text(encoding="utf-8"))
+    entries = _load_applications()  # friendly error on corrupted log, not a traceback
     entries.append(record)
     TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
     print(f"Logged application ({record['date']}, score {record['score']}/100) "

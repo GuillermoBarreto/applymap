@@ -232,3 +232,15 @@ def test_applications_non_list_log_is_friendly_error(tmp_path, monkeypatch, caps
     rc = main(["applications"])
     assert rc == 1
     assert "should be a JSON list" in capsys.readouterr().err
+
+
+def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text("{corrupted", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "not valid JSON" in capsys.readouterr().err
