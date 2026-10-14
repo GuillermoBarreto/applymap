@@ -141,6 +141,50 @@ def cmd_track(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_applications() -> list:
+    """Read the tracked applications log as a list of records.
+
+    Returns an empty list when nothing has been tracked yet. Raises a
+    friendly RuntimeError (instead of a traceback) when the log exists
+    but is corrupted or not shaped like a list.
+    """
+    if not TRACKING_PATH.exists():
+        return []
+    try:
+        entries = json.loads(TRACKING_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raise RuntimeError(
+            f"Applications log at {TRACKING_PATH} is not valid JSON. "
+            "Fix or remove the file, then try again."
+        )
+    if not isinstance(entries, list):
+        raise RuntimeError(
+            f"Applications log at {TRACKING_PATH} should be a JSON list of "
+            f"records, but contains {type(entries).__name__}."
+        )
+    return entries
+
+
+def cmd_applications(args: argparse.Namespace) -> int:
+    """List tracked applications, newest first, optionally filtered by status."""
+    entries = _load_applications()
+    if args.status:
+        entries = [e for e in entries if e.get("status") == args.status]
+    if not entries:
+        if args.status:
+            print(f"No applications with status '{args.status}' tracked yet.")
+        else:
+            print("No applications tracked yet. Log one with `applymap track`.")
+        return 0
+    for e in reversed(entries):
+        company = e.get("company") or "(unknown company)"
+        role = e.get("role") or "(unknown role)"
+        print(f"{e.get('date', '?')}  {e.get('score', '?')}/100  "
+              f"{company} — {role}  [{e.get('status', '?')}]")
+    print(f"\n{len(entries)} application(s) tracked.")
+    return 0
+
+
 def cmd_cover_letter(args: argparse.Namespace) -> int:
     if not is_configured():
         print("Cover letters need APPLYMAP_API_KEY set to an OpenAI-compatible key.")
@@ -199,6 +243,12 @@ def build_parser() -> argparse.ArgumentParser:
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Application status.")
     pt.set_defaults(func=cmd_track)
+
+    ps = sub.add_parser("applications", help="List tracked applications.")
+    ps.add_argument("--status", default=None,
+                    choices=["interested", "applied", "interview", "offer", "rejected"],
+                    help="Only show applications with this status.")
+    ps.set_defaults(func=cmd_applications)
 
     return p
 
