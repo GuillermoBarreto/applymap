@@ -38,6 +38,13 @@ def test_normalize_coerces_non_string_skills():
     assert norm["skills"] == ["python", "123"]
 
 
+def test_load_profile_malformed_yaml_raises_friendly_error(tmp_path):
+    path = tmp_path / "profile.yaml"
+    path.write_text("name: [unclosed\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="not valid YAML"):
+        profile_mod.load_profile(path)
+
+
 def test_load_profile_rejects_non_mapping_yaml(tmp_path):
     path = tmp_path / "profile.yaml"
     path.write_text("- just\n- a\n- list\n", encoding="utf-8")

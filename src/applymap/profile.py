@@ -23,8 +23,14 @@ def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
             f"Profile not found at {resolved}. Run `applymap init-profile` to create one, "
             "or set APPLYMAP_PROFILE to its location."
         )
-    with open(resolved, "r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    try:
+        with open(resolved, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except yaml.YAMLError as exc:
+        raise RuntimeError(
+            f"Profile at {resolved} is not valid YAML: {exc}. "
+            "Fix the syntax (quoting, indentation, brackets), then try again."
+        ) from exc
     if not isinstance(data, dict):
         raise RuntimeError(
             f"Profile at {resolved} must be a YAML mapping of profile fields, "
