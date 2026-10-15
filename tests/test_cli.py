@@ -74,6 +74,20 @@ def test_rank_orders_postings(tmp_path, capsys):
     assert "bad" in lines[1]
 
 
+def test_main_handles_keyboard_interrupt(monkeypatch):
+    import argparse
+
+    from applymap import cli as cli_mod
+
+    def raiser(args):
+        raise KeyboardInterrupt()
+
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(func=raiser)
+    monkeypatch.setattr(cli_mod, "build_parser", lambda: parser)
+    assert main([]) == 130
+
+
 def test_parser_has_subcommands():
     parser = build_parser()
     subparsers = parser._subparsers._group_actions[0]
@@ -110,6 +124,19 @@ def test_rank_csv_export(tmp_path):
     assert int(rows[0]["score"]) >= int(rows[1]["score"])
     assert "python" in rows[0]["matched_skills"]
     assert "kubernetes" in rows[1]["missing_skills"]
+
+
+def test_rank_csv_creates_parent_dirs(tmp_path):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    csv_path = tmp_path / "reports" / "rank.csv"
+    rc = main(
+        ["rank", str(good), "--profile", str(profile_path),
+         "--csv", str(csv_path)]
+    )
+    assert rc == 0
+    assert csv_path.exists()
 
 
 def test_track_logs_application(tmp_path, monkeypatch, capsys):

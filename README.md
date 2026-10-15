@@ -99,6 +99,6 @@ equivalent wording never costs you points.
 - [ ] PDF/DOCX resume parsing so the profile builds itself
 - [x] `track` command: log applications and follow-up dates
 - [x] `applications` command: view tracked applications, filter by status
-- [ ] Skill-gap study plans generated from missing skills
+- [x] Skill-gap study plans generated from missing skills (via `analyze --ai`)
 - [ ] Web UI for side-by-side posting comparison
 - [x] Batch mode: score several postings, export CSV (`rank --csv`)

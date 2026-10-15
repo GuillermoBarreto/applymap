@@ -68,6 +68,13 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
             f"API request failed: {exc.reason}. Check APPLYMAP_API_BASE "
             "and your network connection."
         ) from exc
+    except (TimeoutError, OSError) as exc:
+        # urlopen can surface bare socket timeouts / OS-level network
+        # errors that are not wrapped in URLError.
+        raise RuntimeError(
+            f"API request failed: {exc}. Check APPLYMAP_API_BASE "
+            "and your network connection."
+        ) from exc
     try:
         content = body["choices"][0]["message"]["content"]
         if content is None:

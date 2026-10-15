@@ -119,6 +119,20 @@ def test_chat_http_error_raises_runtime_error(monkeypatch):
             raise AssertionError("expected RuntimeError")
 
 
+def test_chat_timeout_raises_runtime_error(monkeypatch):
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=TimeoutError("timed out"),
+    ):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "API request failed" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+
+
 def test_chat_null_content_raises_runtime_error(monkeypatch):
     monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
     with mock.patch(
