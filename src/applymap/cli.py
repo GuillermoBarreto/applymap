@@ -261,6 +261,10 @@ def main(argv: list | None = None) -> int:
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        # Ctrl+C during a long AI call should exit quietly, not dump a traceback.
+        print(file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":
