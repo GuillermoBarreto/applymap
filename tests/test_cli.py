@@ -126,6 +126,19 @@ def test_rank_csv_export(tmp_path):
     assert "kubernetes" in rows[1]["missing_skills"]
 
 
+def test_rank_csv_creates_parent_dirs(tmp_path):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    csv_path = tmp_path / "reports" / "rank.csv"
+    rc = main(
+        ["rank", str(good), "--profile", str(profile_path),
+         "--csv", str(csv_path)]
+    )
+    assert rc == 0
+    assert csv_path.exists()
+
+
 def test_track_logs_application(tmp_path, monkeypatch, capsys):
     import json
     from applymap import cli as cli_mod

@@ -92,7 +92,10 @@ def cmd_rank(args: argparse.Namespace) -> int:
 
 def _write_rank_csv(path: str, ranked: list) -> None:
     """Write ranked posting results to a CSV file for spreadsheets."""
-    with open(path, "w", newline="", encoding="utf-8") as fh:
+    out = Path(path)
+    # So `--csv reports/ranking.csv` works without pre-creating the folder.
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(
             ["label", "score", "matched_count", "required_count",
