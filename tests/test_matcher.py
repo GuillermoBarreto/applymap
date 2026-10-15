@@ -71,6 +71,23 @@ def test_match_resolves_aliases_on_both_sides():
     assert report["missing"] == ["go"]
 
 
+def test_extract_finds_newer_stack_tokens():
+    posting = (
+        "We need Kafka and Elasticsearch experience. "
+        "S3 and Lambda a plus; Vite or Express on the frontend."
+    )
+    found = matcher.extract_required_skills(posting)
+    for skill in ("kafka", "elasticsearch", "s3", "lambda", "vite", "express"):
+        assert skill in found
+
+
+def test_extract_golang_alias_resolves_to_go():
+    assert matcher.canonicalize("golang") == "go"
+    found = matcher.extract_required_skills("Golang backend developer")
+    assert "go" in found
+    assert "golang" not in found
+
+
 def test_canonicalize_unknown_passes_through():
     assert matcher.canonicalize("  Python ") == "python"
     assert matcher.canonicalize("cobol") == "cobol"

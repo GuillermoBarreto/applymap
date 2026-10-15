@@ -22,6 +22,9 @@ SKILL_TOKENS = {
     "machine learning", "deep learning", "nlp", "llm", "rag",
     "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch",
     "agile", "scrum", "jira",
+    "kafka", "rabbitmq", "elasticsearch", "opensearch",
+    "s3", "ec2", "lambda", "dynamodb",
+    "firebase", "supabase", "vite", "express", "nestjs",
 }
 
 
@@ -38,6 +41,7 @@ SKILL_ALIASES = {
     "scikit learn": "scikit-learn",
     "ci cd": "ci/cd",
     "github actions": "github actions",
+    "golang": "go",
 }
 
 
