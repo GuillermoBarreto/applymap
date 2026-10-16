@@ -20,7 +20,7 @@ pip install .
 pip install -e ".[dev]"   # dev extras not required; tests need pytest + pyyaml
 ```
 
-Requirements: Python 3.9+, `pyyaml`, `pytest` (for tests).
+Requirements: Python 3.10+, `pyyaml`, `pytest` (for tests).
 
 ## Usage
 
