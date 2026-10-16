@@ -14,6 +14,16 @@ from . import __version__, matcher, profile as profile_mod
 from .llm import draft_cover_letter, is_configured, summarize_gaps
 
 
+def _read_posting(path: str) -> str:
+    """Read a posting file, with a friendly error when it is missing."""
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Posting file not found: {path}. Check the path and try again."
+        )
+
+
 def cmd_init_profile(args: argparse.Namespace) -> int:
     path = Path(args.path or str(profile_mod.DEFAULT_PROFILE_PATH)).expanduser()
     if path.exists() and not args.force:
@@ -50,7 +60,7 @@ def cmd_init_profile(args: argparse.Namespace) -> int:
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
-    posting = Path(args.posting).read_text(encoding="utf-8")
+    posting = _read_posting(args.posting)
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
 
     print(f"Fit score: {report['score']}/100\n")
@@ -79,7 +89,7 @@ def cmd_rank(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
     postings = []
     for path in args.postings:
-        postings.append((Path(path).stem, Path(path).read_text(encoding="utf-8")))
+        postings.append((Path(path).stem, _read_posting(path)))
     ranked = matcher.rank_postings(prof["skills"], postings)
     for r in ranked:
         print(f"{r['score']:>3}/100  {r['label']}  "
@@ -121,7 +131,7 @@ TRACKING_PATH = (
 def cmd_track(args: argparse.Namespace) -> int:
     """Log an application: date, company, role, and this profile's fit score."""
     prof = profile_mod.load_profile(args.profile)
-    posting = Path(args.posting).read_text(encoding="utf-8")
+    posting = _read_posting(args.posting)
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
     record = {
         "date": datetime.date.today().isoformat(),
@@ -191,7 +201,7 @@ def cmd_cover_letter(args: argparse.Namespace) -> int:
         print("Cover letters need APPLYMAP_API_KEY set to an OpenAI-compatible key.")
         return 1
     prof = profile_mod.load_profile(args.profile)
-    posting = Path(args.posting).read_text(encoding="utf-8")
+    posting = _read_posting(args.posting)
     letter = draft_cover_letter(prof, posting, args.company, args.role)
     if args.output:
         Path(args.output).write_text(letter + "\n", encoding="utf-8")
