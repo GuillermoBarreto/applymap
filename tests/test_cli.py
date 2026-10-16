@@ -281,3 +281,14 @@ def test_analyze_missing_posting_is_friendly_error(tmp_path, capsys):
     )
     assert rc == 1
     assert "Posting file not found" in capsys.readouterr().err
+
+
+def test_track_stores_absolute_posting_path(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path)]) == 0
+    record = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))[0]
+    assert record["posting"] == str(posting_path.resolve())
