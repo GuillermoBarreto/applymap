@@ -292,3 +292,19 @@ def test_track_stores_absolute_posting_path(tmp_path, monkeypatch):
     assert main(["track", str(posting_path), "--profile", str(profile_path)]) == 0
     record = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))[0]
     assert record["posting"] == str(posting_path.resolve())
+
+
+def test_track_duplicate_is_skipped(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    argv = ["track", str(posting_path), "--profile", str(profile_path),
+            "--company", "Acme", "--role", "Backend Dev"]
+    assert main(argv) == 0
+    capsys.readouterr()
+    assert main(argv) == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
