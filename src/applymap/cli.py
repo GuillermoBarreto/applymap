@@ -61,6 +61,9 @@ def cmd_init_profile(args: argparse.Namespace) -> int:
 def cmd_analyze(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
     posting = _read_posting(args.posting)
+    # Store the posting as an absolute path so the record still points at
+    # the right file when applymap runs from a different directory.
+    posting_path = str(Path(args.posting).expanduser().resolve())
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
 
     print(f"Fit score: {report['score']}/100\n")
@@ -137,7 +140,7 @@ def cmd_track(args: argparse.Namespace) -> int:
         "date": datetime.date.today().isoformat(),
         "company": args.company or "",
         "role": args.role or "",
-        "posting": args.posting,
+        "posting": posting_path,
         "score": report["score"],
         "matched_skills": report["matched"],
         "missing_skills": report["missing"],
