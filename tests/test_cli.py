@@ -271,3 +271,13 @@ def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
     rc = main(["track", str(posting_path), "--profile", str(profile_path)])
     assert rc == 1
     assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_analyze_missing_posting_is_friendly_error(tmp_path, capsys):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    rc = main(
+        ["analyze", str(tmp_path / "missing.txt"),
+         "--profile", str(profile_path)]
+    )
+    assert rc == 1
+    assert "Posting file not found" in capsys.readouterr().err
