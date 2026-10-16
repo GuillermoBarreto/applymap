@@ -34,6 +34,7 @@ applymap init-profile        # writes ~/.applymap/profile.yaml — edit it with 
 
 ```bash
 applymap analyze posting.txt
+applymap analyze posting.txt --json   # machine-readable report for scripting
 ```
 
 Example output:
