@@ -20,7 +20,7 @@ pip install .
 pip install -e ".[dev]"   # dev extras not required; tests need pytest + pyyaml
 ```
 
-Requirements: Python 3.9+, `pyyaml`, `pytest` (for tests).
+Requirements: Python 3.10+, `pyyaml`, `pytest` (for tests).
 
 ## Usage
 
@@ -34,6 +34,7 @@ applymap init-profile        # writes ~/.applymap/profile.yaml — edit it with 
 
 ```bash
 applymap analyze posting.txt
+applymap analyze posting.txt --json   # machine-readable report for scripting
 ```
 
 Example output:

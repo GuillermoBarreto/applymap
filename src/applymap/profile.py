@@ -41,6 +41,11 @@ def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
 
 def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize raw profile data into the fields applymap expects."""
+    def _as_list(value):
+        # A hand-edited profile might use a bare `skills: python` instead of
+        # a YAML list; wrap it so we never iterate over a string's characters.
+        return value if isinstance(value, list) else [value]
+
     profile = {
         "name": data.get("name", ""),
         "headline": data.get("headline", ""),
@@ -48,11 +53,11 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
         # a hand-edited profile never crashes the matcher.
         "skills": [
             str(s).strip().lower()
-            for s in data.get("skills", [])
+            for s in _as_list(data.get("skills", []))
             if s and str(s).strip()
         ],
-        "experience": [str(e) for e in data.get("experience", [])],
-        "target_roles": [str(r) for r in data.get("target_roles", [])],
+        "experience": [str(e) for e in _as_list(data.get("experience", []))],
+        "target_roles": [str(r) for r in _as_list(data.get("target_roles", []))],
         "location": data.get("location", ""),
     }
     # De-duplicate skills while preserving order.

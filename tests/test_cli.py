@@ -271,3 +271,52 @@ def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
     rc = main(["track", str(posting_path), "--profile", str(profile_path)])
     assert rc == 1
     assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_analyze_missing_posting_is_friendly_error(tmp_path, capsys):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    rc = main(
+        ["analyze", str(tmp_path / "missing.txt"),
+         "--profile", str(profile_path)]
+    )
+    assert rc == 1
+    assert "Posting file not found" in capsys.readouterr().err
+
+
+def test_track_stores_absolute_posting_path(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path)]) == 0
+    record = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))[0]
+    assert record["posting"] == str(posting_path.resolve())
+
+
+def test_track_duplicate_is_skipped(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    argv = ["track", str(posting_path), "--profile", str(profile_path),
+            "--company", "Acme", "--role", "Backend Dev"]
+    assert main(argv) == 0
+    capsys.readouterr()
+    assert main(argv) == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+
+
+def test_analyze_json_output(tmp_path, capsys):
+    import json
+
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--json"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["score"] == 67
+    assert "python" in report["matched"]
+    assert "kubernetes" in report["missing"]
