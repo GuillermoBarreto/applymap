@@ -148,11 +148,29 @@ def cmd_track(args: argparse.Namespace) -> int:
     }
     TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
     entries = _load_applications()  # friendly error on corrupted log, not a traceback
+    if _already_tracked(entries, posting_path, args.company or "", args.role or ""):
+        return 0
     entries.append(record)
     TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
     print(f"Logged application ({record['date']}, score {record['score']}/100) "
           f"to {TRACKING_PATH}")
     return 0
+
+
+def _already_tracked(entries: list, posting_path: str, company: str, role: str) -> bool:
+    """True when this exact application is already logged; warns the user."""
+    for entry in entries:
+        if (entry.get("posting") == posting_path
+                and entry.get("company") == company
+                and entry.get("role") == role):
+            print(
+                f"Already tracking {company or 'this posting'}"
+                f"{' — ' + role if role else ''} "
+                f"(logged {entry.get('date', 'on an unknown date')}). "
+                "Skipping the duplicate."
+            )
+            return True
+    return False
 
 
 def _load_applications() -> list:
