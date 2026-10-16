@@ -308,3 +308,15 @@ def test_track_duplicate_is_skipped(tmp_path, monkeypatch, capsys):
     assert "Already tracking" in capsys.readouterr().out
     entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
     assert len(entries) == 1
+
+
+def test_analyze_json_output(tmp_path, capsys):
+    import json
+
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--json"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["score"] == 67
+    assert "python" in report["matched"]
+    assert "kubernetes" in report["missing"]
