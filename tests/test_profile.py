@@ -50,3 +50,13 @@ def test_load_profile_rejects_non_mapping_yaml(tmp_path):
     path.write_text("- just\n- a\n- list\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="must be a YAML mapping"):
         profile_mod.load_profile(path)
+
+
+def test_normalize_coerces_bare_string_list_fields():
+    from applymap.profile import normalize
+
+    # A bare `skills: python` in YAML parses as a string, not a list —
+    # normalize must not explode it into single characters.
+    p = normalize({"skills": "Python", "experience": "did things"})
+    assert p["skills"] == ["python"]
+    assert p["experience"] == ["did things"]
