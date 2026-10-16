@@ -7,7 +7,7 @@ name = "applymap"
 version = "0.1.0"
 description = "AI job-posting analyzer: score a job description against your profile, spot skill gaps, draft tailored cover letters"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Guillermo Barreto" }]
 dependencies = ["pyyaml>=6.0"]
