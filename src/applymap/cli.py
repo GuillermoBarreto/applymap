@@ -66,6 +66,11 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     posting_path = str(Path(args.posting).expanduser().resolve())
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
 
+    if args.json:
+        # Machine-readable output for scripting (e.g. piping into jq).
+        print(json.dumps(report, indent=2))
+        return 0
+
     print(f"Fit score: {report['score']}/100\n")
     if report["matched"]:
         print("Matched skills:")
@@ -249,6 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("posting", help="Path to the job posting text file.")
     pa.add_argument("--profile", default=None)
     pa.add_argument("--ai", action="store_true", help="Add AI gap analysis (needs API key).")
+    pa.add_argument("--json", action="store_true",
+                    help="Print the fit report as JSON instead of text.")
     pa.set_defaults(func=cmd_analyze)
 
     pr = sub.add_parser("rank", help="Rank several postings by fit score.")
