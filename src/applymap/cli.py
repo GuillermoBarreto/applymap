@@ -16,11 +16,12 @@ from .llm import draft_cover_letter, is_configured, summarize_gaps
 
 def _read_posting(path: str) -> str:
     """Read a posting file, with a friendly error when it is missing."""
+    resolved = Path(path).expanduser()
     try:
-        return Path(path).read_text(encoding="utf-8")
+        return resolved.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise FileNotFoundError(
-            f"Posting file not found: {path}. Check the path and try again."
+            f"Posting file not found: {resolved}. Check the path and try again."
         )
 
 
@@ -84,6 +85,10 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if args.ai:
         if not is_configured():
             print("\nAI features need APPLYMAP_API_KEY. Skipping AI summary.")
+            return 0
+        if not report["missing"]:
+            # Nothing to analyze — skip the paid API call entirely.
+            print("\nNo missing skills — nothing for the AI gap analysis to cover.")
             return 0
         print("\n--- AI gap analysis ---")
         print(summarize_gaps(prof, report["missing"]))
@@ -162,12 +167,22 @@ def cmd_track(args: argparse.Namespace) -> int:
     return 0
 
 
+def _norm_identity(value: str) -> str:
+    """Normalize a company/role name for duplicate detection.
+
+    Company names typed as "Acme", "acme", or "  Acme " are the same
+    application; compare case- and whitespace-insensitively.
+    """
+    return (value or "").strip().casefold()
+
+
 def _already_tracked(entries: list, posting_path: str, company: str, role: str) -> bool:
     """True when this exact application is already logged; warns the user."""
+    company, role = _norm_identity(company), _norm_identity(role)
     for entry in entries:
         if (entry.get("posting") == posting_path
-                and entry.get("company") == company
-                and entry.get("role") == role):
+                and _norm_identity(entry.get("company")) == company
+                and _norm_identity(entry.get("role")) == role):
             print(
                 f"Already tracking {company or 'this posting'}"
                 f"{' — ' + role if role else ''} "
@@ -230,7 +245,10 @@ def cmd_cover_letter(args: argparse.Namespace) -> int:
     posting = _read_posting(args.posting)
     letter = draft_cover_letter(prof, posting, args.company, args.role)
     if args.output:
-        Path(args.output).write_text(letter + "\n", encoding="utf-8")
+        out = Path(args.output)
+        # Like `rank --csv`: don't fail when the target folder doesn't exist yet.
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(letter + "\n", encoding="utf-8")
         print(f"Wrote cover letter to {args.output}")
     else:
         print(letter)

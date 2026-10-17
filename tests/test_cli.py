@@ -320,3 +320,74 @@ def test_analyze_json_output(tmp_path, capsys):
     assert report["score"] == 67
     assert "python" in report["matched"]
     assert "kubernetes" in report["missing"]
+
+
+def test_read_posting_expands_home(tmp_path, monkeypatch):
+    from applymap.cli import _read_posting
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    posting = tmp_path / "posting.txt"
+    posting.write_text("Python developer", encoding="utf-8")
+    assert _read_posting("~/posting.txt") == "Python developer"
+
+
+def test_cover_letter_output_creates_parent_dirs(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setattr(
+        cli_mod, "draft_cover_letter", lambda prof, posting, company, role: "Dear Acme"
+    )
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    out = tmp_path / "letters" / "acme.md"
+    rc = main(
+        [
+            "cover-letter",
+            str(posting_path),
+            "--company", "Acme",
+            "--role", "Backend Dev",
+            "--profile", str(profile_path),
+            "--output", str(out),
+        ]
+    )
+    assert rc == 0
+    assert out.read_text(encoding="utf-8") == "Dear Acme\n"
+    assert "Wrote cover letter" in capsys.readouterr().out
+
+
+def test_track_duplicate_ignores_case_and_whitespace(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    base = ["track", str(posting_path), "--profile", str(profile_path)]
+    assert main(base + ["--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    # Same application with different casing/whitespace must not double-log.
+    assert main(base + ["--company", "  acme ", "--role", "BACKEND dev"]) == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+
+
+def test_analyze_ai_skips_api_call_when_nothing_missing(tmp_path, capsys, monkeypatch):
+    import yaml
+    from applymap import cli as cli_mod
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    called = []
+    monkeypatch.setattr(
+        cli_mod, "summarize_gaps",
+        lambda prof, missing: called.append(missing) or "summary",
+    )
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump({"name": "T", "skills": ["python", "sql"]}), encoding="utf-8"
+    )
+    posting_path = tmp_path / "posting.txt"
+    posting_path.write_text("Python and SQL developer.", encoding="utf-8")
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--ai"])
+    assert rc == 0
+    assert called == []  # no paid API call when there is nothing to analyze
+    assert "No missing skills" in capsys.readouterr().out

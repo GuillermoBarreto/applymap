@@ -106,3 +106,26 @@ def test_tokenize_keeps_tech_tokens_and_lowercases():
     assert "node.js" in tokens
     assert "c++" in tokens
     assert "Python" not in tokens
+
+
+def test_extract_required_skills_finds_hyphenated_tokens():
+    posting = (
+        "REST-API design, CI-CD pipelines, Open-API specs, "
+        "and React-Native apps."
+    )
+    found = matcher.extract_required_skills(posting)
+    assert "rest" in found
+    assert "rest-api" not in found
+    assert "ci/cd" in found
+    assert "openapi" in found
+    assert "react-native" in found
+
+
+def test_extract_hyphenated_spellings_match_profile_skills():
+    posting = "Node-JS and Next-JS experience; a machine-learning background is a plus."
+    found = matcher.extract_required_skills(posting)
+    assert "node" in found
+    assert "nextjs" in found
+    assert "machine learning" in found
+    report = matcher.match(["node", "javascript"], found)
+    assert "node" in report["matched"]
