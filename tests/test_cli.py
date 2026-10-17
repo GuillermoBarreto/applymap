@@ -353,3 +353,19 @@ def test_cover_letter_output_creates_parent_dirs(tmp_path, monkeypatch, capsys):
     assert rc == 0
     assert out.read_text(encoding="utf-8") == "Dear Acme\n"
     assert "Wrote cover letter" in capsys.readouterr().out
+
+
+def test_track_duplicate_ignores_case_and_whitespace(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    base = ["track", str(posting_path), "--profile", str(profile_path)]
+    assert main(base + ["--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    # Same application with different casing/whitespace must not double-log.
+    assert main(base + ["--company", "  acme ", "--role", "BACKEND dev"]) == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1

@@ -163,12 +163,22 @@ def cmd_track(args: argparse.Namespace) -> int:
     return 0
 
 
+def _norm_identity(value: str) -> str:
+    """Normalize a company/role name for duplicate detection.
+
+    Company names typed as "Acme", "acme", or "  Acme " are the same
+    application; compare case- and whitespace-insensitively.
+    """
+    return (value or "").strip().casefold()
+
+
 def _already_tracked(entries: list, posting_path: str, company: str, role: str) -> bool:
     """True when this exact application is already logged; warns the user."""
+    company, role = _norm_identity(company), _norm_identity(role)
     for entry in entries:
         if (entry.get("posting") == posting_path
-                and entry.get("company") == company
-                and entry.get("role") == role):
+                and _norm_identity(entry.get("company")) == company
+                and _norm_identity(entry.get("role")) == role):
             print(
                 f"Already tracking {company or 'this posting'}"
                 f"{' — ' + role if role else ''} "
