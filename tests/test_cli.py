@@ -329,3 +329,27 @@ def test_read_posting_expands_home(tmp_path, monkeypatch):
     posting = tmp_path / "posting.txt"
     posting.write_text("Python developer", encoding="utf-8")
     assert _read_posting("~/posting.txt") == "Python developer"
+
+
+def test_cover_letter_output_creates_parent_dirs(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setattr(
+        cli_mod, "draft_cover_letter", lambda prof, posting, company, role: "Dear Acme"
+    )
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    out = tmp_path / "letters" / "acme.md"
+    rc = main(
+        [
+            "cover-letter",
+            str(posting_path),
+            "--company", "Acme",
+            "--role", "Backend Dev",
+            "--profile", str(profile_path),
+            "--output", str(out),
+        ]
+    )
+    assert rc == 0
+    assert out.read_text(encoding="utf-8") == "Dear Acme\n"
+    assert "Wrote cover letter" in capsys.readouterr().out

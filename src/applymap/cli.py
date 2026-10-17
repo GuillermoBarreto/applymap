@@ -231,7 +231,10 @@ def cmd_cover_letter(args: argparse.Namespace) -> int:
     posting = _read_posting(args.posting)
     letter = draft_cover_letter(prof, posting, args.company, args.role)
     if args.output:
-        Path(args.output).write_text(letter + "\n", encoding="utf-8")
+        out = Path(args.output)
+        # Like `rank --csv`: don't fail when the target folder doesn't exist yet.
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(letter + "\n", encoding="utf-8")
         print(f"Wrote cover letter to {args.output}")
     else:
         print(letter)
