@@ -9,15 +9,17 @@ import re
 from typing import Dict, List, Set, Tuple
 
 # Common tech tokens applymap can recognize in a posting. Matches are
-# token-based, so "React" matches "react" but not "reactive".
+# token-based, so "React" matches "react" but not "reactive". Hyphenated
+# spellings (e.g. "rest-api") are covered by SKILL_ALIASES below; the
+# tokenizer keeps hyphens inside tokens.
 SKILL_TOKENS = {
     "python", "typescript", "javascript", "java", "go", "rust", "c#", "c++",
     "sql", "postgres", "postgresql", "mysql", "sqlite", "mongodb", "redis",
-    "react", "next.js", "nextjs", "node", "node.js", "django", "flask",
-    "fastapi", "spring", "spring boot", "angular", "vue", "tailwind",
+    "react", "react-native", "next.js", "nextjs", "node", "node.js", "django",
+    "flask", "fastapi", "spring", "spring boot", "angular", "vue", "tailwind",
     "docker", "kubernetes", "k8s", "terraform", "aws", "gcp", "azure",
     "git", "github", "ci/cd", "github actions", "jenkins", "linux",
-    "bash", "rest", "graphql", "openapi", "jwt", "oauth",
+    "bash", "rest", "rest-api", "graphql", "openapi", "jwt", "oauth",
     "pytest", "jest", "junit", "selenium", "playwright",
     "machine learning", "deep learning", "nlp", "llm", "rag",
     "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch",
@@ -37,8 +39,15 @@ SKILL_ALIASES = {
     "ts": "typescript",
     "postgres": "postgresql",
     "node.js": "node",
+    "node-js": "node",
     "next.js": "nextjs",
+    "next-js": "nextjs",
     "scikit learn": "scikit-learn",
+    "machine-learning": "machine learning",
+    "deep-learning": "deep learning",
+    "rest-api": "rest",
+    "ci-cd": "ci/cd",
+    "open-api": "openapi",
     "ci cd": "ci/cd",
     "github actions": "github actions",
     "golang": "go",
@@ -61,7 +70,9 @@ def extract_required_skills(posting: str) -> List[str]:
 
     Multi-word tokens (e.g. "spring boot") match against the raw text,
     single-word tokens match against tokenized words. Aliases (e.g. "k8s")
-    are resolved to their canonical form ("kubernetes").
+    are resolved to their canonical form ("kubernetes"). Hyphenated
+    spellings such as "REST-API" or "machine-learning" are matched through
+    aliases, since the tokenizer keeps hyphens inside tokens.
     """
     lowered = posting.lower()
     # Strip sentence-final dots: "TS." must tokenize as "ts", not "ts.".

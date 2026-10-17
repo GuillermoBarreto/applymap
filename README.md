@@ -93,7 +93,9 @@ with no key and no network. Only `cover-letter` and `--ai` call the API.
 Skill aliases: the matcher treats common alternate names as the same skill
 — `k8s` counts as `kubernetes`, `js` as `javascript`, `postgres` as
 `postgresql`, and so on — on both the profile and the posting side, so
-equivalent wording never costs you points.
+equivalent wording never costs you points. Hyphenated spellings are
+covered too: `REST-API` counts as `rest`, `CI-CD` as `ci/cd`,
+`machine-learning` as `machine learning`.
 
 ## Roadmap
 
