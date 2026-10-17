@@ -86,6 +86,10 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         if not is_configured():
             print("\nAI features need APPLYMAP_API_KEY. Skipping AI summary.")
             return 0
+        if not report["missing"]:
+            # Nothing to analyze — skip the paid API call entirely.
+            print("\nNo missing skills — nothing for the AI gap analysis to cover.")
+            return 0
         print("\n--- AI gap analysis ---")
         print(summarize_gaps(prof, report["missing"]))
     return 0

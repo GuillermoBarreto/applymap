@@ -369,3 +369,25 @@ def test_track_duplicate_ignores_case_and_whitespace(tmp_path, monkeypatch, caps
     assert "Already tracking" in capsys.readouterr().out
     entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
     assert len(entries) == 1
+
+
+def test_analyze_ai_skips_api_call_when_nothing_missing(tmp_path, capsys, monkeypatch):
+    import yaml
+    from applymap import cli as cli_mod
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    called = []
+    monkeypatch.setattr(
+        cli_mod, "summarize_gaps",
+        lambda prof, missing: called.append(missing) or "summary",
+    )
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump({"name": "T", "skills": ["python", "sql"]}), encoding="utf-8"
+    )
+    posting_path = tmp_path / "posting.txt"
+    posting_path.write_text("Python and SQL developer.", encoding="utf-8")
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--ai"])
+    assert rc == 0
+    assert called == []  # no paid API call when there is nothing to analyze
+    assert "No missing skills" in capsys.readouterr().out
