@@ -16,11 +16,12 @@ from .llm import draft_cover_letter, is_configured, summarize_gaps
 
 def _read_posting(path: str) -> str:
     """Read a posting file, with a friendly error when it is missing."""
+    resolved = Path(path).expanduser()
     try:
-        return Path(path).read_text(encoding="utf-8")
+        return resolved.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise FileNotFoundError(
-            f"Posting file not found: {path}. Check the path and try again."
+            f"Posting file not found: {resolved}. Check the path and try again."
         )
 
 

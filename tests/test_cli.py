@@ -320,3 +320,12 @@ def test_analyze_json_output(tmp_path, capsys):
     assert report["score"] == 67
     assert "python" in report["matched"]
     assert "kubernetes" in report["missing"]
+
+
+def test_read_posting_expands_home(tmp_path, monkeypatch):
+    from applymap.cli import _read_posting
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    posting = tmp_path / "posting.txt"
+    posting.write_text("Python developer", encoding="utf-8")
+    assert _read_posting("~/posting.txt") == "Python developer"
