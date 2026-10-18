@@ -391,3 +391,28 @@ def test_analyze_ai_skips_api_call_when_nothing_missing(tmp_path, capsys, monkey
     assert rc == 0
     assert called == []  # no paid API call when there is nothing to analyze
     assert "No missing skills" in capsys.readouterr().out
+
+
+def test_analyze_shows_mention_counts(tmp_path, capsys):
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    posting_path.write_text(
+        "Backend developer: Python, Python, SQL, and Kubernetes, Kubernetes, "
+        "Kubernetes experience required.",
+        encoding="utf-8",
+    )
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "python (mentioned 2x)" in out
+    assert "kubernetes (mentioned 3x)" in out
+
+
+def test_analyze_json_includes_mentions(tmp_path, capsys):
+    import json
+
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--json"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["mentions"]["python"] == 1
+    assert report["mentions"]["kubernetes"] == 1

@@ -62,7 +62,9 @@ def cmd_init_profile(args: argparse.Namespace) -> int:
 def cmd_analyze(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
     posting = _read_posting(args.posting)
-    report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
+    required = matcher.extract_required_skills(posting)
+    report = matcher.match(prof["skills"], required)
+    report["mentions"] = matcher.skill_mentions(posting, required)
 
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
@@ -73,11 +75,11 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if report["matched"]:
         print("Matched skills:")
         for s in report["matched"]:
-            print(f"  + {s}")
+            print(f"  + {s} (mentioned {report['mentions'][s]}x)")
     if report["missing"]:
         print("\nMissing skills:")
         for s in report["missing"]:
-            print(f"  - {s}")
+            print(f"  - {s} (mentioned {report['mentions'][s]}x)")
     if not report["required"]:
         print("(No recognizable tech skills found in the posting.)")
         return 0
