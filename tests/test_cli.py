@@ -416,3 +416,42 @@ def test_analyze_json_includes_mentions(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["mentions"]["python"] == 1
     assert report["mentions"]["kubernetes"] == 1
+
+
+def test_rank_min_score_hides_low_fit(tmp_path, capsys):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--min-score", "50"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "good" in out
+    assert "bad" not in out.split("hidden")[0]
+    assert "1 posting(s) below --min-score 50 hidden" in out
+
+
+def test_rank_min_score_filters_csv(tmp_path):
+    import csv
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    csv_path = tmp_path / "rank.csv"
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--csv", str(csv_path), "--min-score", "50"])
+    assert rc == 0
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert [r["label"] for r in rows] == ["good"]
+
+
+def test_rank_min_score_rejects_out_of_range(capsys):
+    with __import__("pytest").raises(SystemExit) as exc:
+        main(["rank", "x.txt", "--min-score", "101"])
+    assert exc.value.code == 2
+    assert "between 0 and 100" in capsys.readouterr().err

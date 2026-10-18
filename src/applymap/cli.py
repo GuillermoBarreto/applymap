@@ -103,9 +103,13 @@ def cmd_rank(args: argparse.Namespace) -> int:
     for path in args.postings:
         postings.append((Path(path).stem, _read_posting(path)))
     ranked = matcher.rank_postings(prof["skills"], postings)
+    hidden = [r for r in ranked if r["score"] < args.min_score]
+    ranked = [r for r in ranked if r["score"] >= args.min_score]
     for r in ranked:
         print(f"{r['score']:>3}/100  {r['label']}  "
               f"({len(r['matched'])}/{len(r['required'])} skills)")
+    if hidden:
+        print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
     if args.csv:
         _write_rank_csv(args.csv, ranked)
         print(f"Wrote ranking to {args.csv}")
@@ -257,6 +261,17 @@ def cmd_cover_letter(args: argparse.Namespace) -> int:
     return 0
 
 
+def _score_type(value: str) -> int:
+    """argparse type for 0-100 score thresholds like --min-score."""
+    try:
+        score = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if not 0 <= score <= 100:
+        raise argparse.ArgumentTypeError(f"{value!r} is not between 0 and 100")
+    return score
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="applymap",
@@ -283,6 +298,8 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--profile", default=None)
     pr.add_argument("--csv", default=None, metavar="PATH",
                     help="Also write the ranking to a CSV file.")
+    pr.add_argument("--min-score", default=0, type=_score_type, metavar="0-100",
+                    help="Hide postings scoring below this fit score.")
     pr.set_defaults(func=cmd_rank)
 
     pc = sub.add_parser("cover-letter", help="Draft a tailored cover letter (needs API key).")
