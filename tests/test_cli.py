@@ -489,3 +489,72 @@ def test_cover_letter_output_expands_home(tmp_path, monkeypatch):
     assert rc == 0
     assert (tmp_path / "letters" / "acme.md").read_text(encoding="utf-8") == "Dear Acme\n"
     assert not (tmp_path / "~").exists()
+
+
+def _write_sparse_profile(tmp_path, **overrides):
+    import yaml
+
+    data = {"name": "", "headline": "", "skills": [],
+            "experience": [], "target_roles": []}
+    data.update(overrides)
+    path = tmp_path / "profile.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    return path
+
+
+def test_check_profile_clean_passes(tmp_path, capsys):
+    import yaml
+
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "Test Dev",
+                "headline": "Software engineering student",
+                "skills": ["python", "sql", "docker"],
+                "experience": ["automated deployments"],
+                "target_roles": ["Backend Developer"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 0
+    assert "Profile looks good." in capsys.readouterr().out
+
+
+def test_check_profile_reports_gaps(tmp_path, capsys):
+    profile_path = _write_sparse_profile(tmp_path)
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Profile issues found:" in out
+    assert "name is empty" in out
+    assert "no skills listed" in out
+    assert "no target_roles" in out
+    assert "no experience entries" in out
+
+
+def test_check_profile_warns_on_unknown_skills(tmp_path, capsys):
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h", skills=["python", "cobol"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "cobol" in out
+    assert "matcher's vocabulary" in out
+
+
+def test_check_profile_missing_file_is_friendly_error(tmp_path, capsys):
+    rc = main(["check-profile", "--profile", str(tmp_path / "nope.yaml")])
+    assert rc == 1
+    assert "Profile not found" in capsys.readouterr().err
+
+
+def test_parser_has_check_profile_subcommand():
+    parser = build_parser()
+    subparsers = parser._subparsers._group_actions[0]
+    assert "check-profile" in subparsers.choices
+    assert callable(subparsers.choices["check-profile"].get_default("func"))

@@ -28,6 +28,7 @@ Requirements: Python 3.10+, `pyyaml`, `pytest` (for tests).
 
 ```bash
 applymap init-profile        # writes ~/.applymap/profile.yaml — edit it with your real details
+applymap check-profile       # validate it: warns about gaps the matcher needs
 ```
 
 2. Save a job posting to a text file, then analyze it:

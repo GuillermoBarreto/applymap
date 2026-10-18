@@ -276,6 +276,52 @@ def _score_type(value: str) -> int:
     return score
 
 
+def cmd_check_profile(args: argparse.Namespace) -> int:
+    """Validate the profile and report gaps the matcher and AI need filled.
+
+    Exits 1 when anything is missing so it can gate scripts; exits 0
+    with "Profile looks good." when the profile is complete.
+    """
+    prof = profile_mod.load_profile(args.profile)
+    warnings = []
+    if not prof.get("name"):
+        warnings.append(
+            "name is empty — set it so cover letters address you correctly."
+        )
+    if not prof.get("headline"):
+        warnings.append(
+            "headline is empty — one line about who you are sharpens AI prompts."
+        )
+    skills = prof.get("skills", [])
+    if not skills:
+        warnings.append(
+            "no skills listed — analyze and track scores will always be 0."
+        )
+    else:
+        unknown = [
+            s for s in skills
+            if matcher.canonicalize(s) not in matcher.SKILL_TOKENS
+        ]
+        if unknown:
+            warnings.append(
+                "these skills aren't in the matcher's vocabulary and will "
+                f"never match a posting: {', '.join(unknown)}"
+            )
+    if not prof.get("target_roles"):
+        warnings.append("no target_roles listed — add the roles you're aiming for.")
+    if not prof.get("experience"):
+        warnings.append(
+            "no experience entries — cover letters are built from these facts."
+        )
+    if warnings:
+        print("Profile issues found:")
+        for w in warnings:
+            print(f"  - {w}")
+        return 1
+    print("Profile looks good.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="applymap",
@@ -288,6 +334,10 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--path", default=None)
     pi.add_argument("--force", action="store_true")
     pi.set_defaults(func=cmd_init_profile)
+
+    pk = sub.add_parser("check-profile", help="Validate your profile for gaps.")
+    pk.add_argument("--profile", default=None)
+    pk.set_defaults(func=cmd_check_profile)
 
     pa = sub.add_parser("analyze", help="Score one posting against your profile.")
     pa.add_argument("posting", help="Path to the job posting text file.")
