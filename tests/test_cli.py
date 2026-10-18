@@ -455,3 +455,37 @@ def test_rank_min_score_rejects_out_of_range(capsys):
         main(["rank", "x.txt", "--min-score", "101"])
     assert exc.value.code == 2
     assert "between 0 and 100" in capsys.readouterr().err
+
+
+def test_rank_csv_expands_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    rc = main(["rank", str(good), "--profile", str(profile_path),
+               "--csv", "~/reports/rank.csv"])
+    assert rc == 0
+    assert (tmp_path / "reports" / "rank.csv").exists()
+    assert not (tmp_path / "~").exists()
+
+
+def test_cover_letter_output_expands_home(tmp_path, monkeypatch):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setattr(
+        cli_mod, "draft_cover_letter", lambda prof, posting, company, role: "Dear Acme"
+    )
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(
+        [
+            "cover-letter", str(posting_path),
+            "--company", "Acme", "--role", "Backend Dev",
+            "--profile", str(profile_path),
+            "--output", "~/letters/acme.md",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "letters" / "acme.md").read_text(encoding="utf-8") == "Dear Acme\n"
+    assert not (tmp_path / "~").exists()

@@ -118,7 +118,9 @@ def cmd_rank(args: argparse.Namespace) -> int:
 
 def _write_rank_csv(path: str, ranked: list) -> None:
     """Write ranked posting results to a CSV file for spreadsheets."""
-    out = Path(path)
+    # Expand ~ like the posting inputs do, so `--csv ~/reports/r.csv`
+    # doesn't create a literal "~" directory.
+    out = Path(path).expanduser()
     # So `--csv reports/ranking.csv` works without pre-creating the folder.
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="", encoding="utf-8") as fh:
@@ -251,7 +253,9 @@ def cmd_cover_letter(args: argparse.Namespace) -> int:
     posting = _read_posting(args.posting)
     letter = draft_cover_letter(prof, posting, args.company, args.role)
     if args.output:
-        out = Path(args.output)
+        # Expand ~ like the posting inputs do (see _read_posting), so
+        # `--output ~/letters/acme.md` doesn't create a literal "~" dir.
+        out = Path(args.output).expanduser()
         # Like `rank --csv`: don't fail when the target folder doesn't exist yet.
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(letter + "\n", encoding="utf-8")
