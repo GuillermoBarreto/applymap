@@ -76,6 +76,7 @@ List what you've applied to (newest first), optionally filtered by status:
 ```bash
 applymap applications
 applymap applications --status interview
+applymap applications --json   # machine-readable records for scripting
 ```
 
 5. AI features (optional, need an API key):

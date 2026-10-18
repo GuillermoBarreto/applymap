@@ -230,6 +230,10 @@ def cmd_applications(args: argparse.Namespace) -> int:
     entries = _load_applications()
     if args.status:
         entries = [e for e in entries if e.get("status") == args.status]
+    if args.json:
+        # Machine-readable output for scripting (e.g. piping into jq).
+        print(json.dumps(entries, indent=2))
+        return 0
     if not entries:
         if args.status:
             print(f"No applications with status '{args.status}' tracked yet.")
@@ -378,6 +382,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--status", default=None,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Only show applications with this status.")
+    ps.add_argument("--json", action="store_true",
+                    help="Print the tracked records as JSON instead of text.")
     ps.set_defaults(func=cmd_applications)
 
     return p

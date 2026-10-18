@@ -558,3 +558,34 @@ def test_parser_has_check_profile_subcommand():
     subparsers = parser._subparsers._group_actions[0]
     assert "check-profile" in subparsers.choices
     assert callable(subparsers.choices["check-profile"].get_default("func"))
+
+
+def test_applications_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["applications", "--json"])
+    assert rc == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert len(entries) == 2
+    assert entries[0]["company"] == "Acme"
+
+
+def test_applications_json_respects_status_filter(tmp_path, monkeypatch, capsys):
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["applications", "--json", "--status", "interview"])
+    assert rc == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert len(entries) == 1
+    assert entries[0]["company"] == "Globex"
+
+
+def test_applications_json_empty_log(tmp_path, monkeypatch, capsys):
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    rc = main(["applications", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
