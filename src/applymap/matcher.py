@@ -90,6 +90,40 @@ def extract_required_skills(posting: str) -> List[str]:
     return sorted({canonicalize(s) for s in found})
 
 
+def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
+    """Count how often each required skill appears in a posting.
+
+    Alias spellings (e.g. "k8s") count toward their canonical skill
+    ("kubernetes"), matching the behavior of extract_required_skills.
+    Single-word skills count whole-token occurrences and multi-word
+    skills (e.g. "spring boot") count substring occurrences — the same
+    rules extract_required_skills uses, so the counts always agree with
+    what the extractor found. Skills never mentioned map to 0.
+    """
+    lowered = posting.lower()
+    # Raw token list (not the deduped set from tokenize): duplicates matter
+    # for counting.
+    tokens = [
+        t.rstrip(".")
+        for t in re.findall(r"[a-z0-9][a-z0-9+#./\-]*", lowered)
+    ]
+    # All surface forms that resolve to each canonical skill.
+    forms: Dict[str, List[str]] = {}
+    for form in sorted(SKILL_TOKENS | set(SKILL_ALIASES)):
+        forms.setdefault(canonicalize(form), []).append(form)
+    mentions = {}
+    for skill in required:
+        canon = canonicalize(skill)
+        total = 0
+        for form in forms.get(canon, [canon]):
+            if " " in form or "/" in form or "." in form:
+                total += lowered.count(form)
+            else:
+                total += sum(1 for t in tokens if t == form)
+        mentions[skill] = total
+    return mentions
+
+
 def match(profile_skills: List[str], required: List[str]) -> Dict[str, object]:
     """Compare profile skills against required skills.
 

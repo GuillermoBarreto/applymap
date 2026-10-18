@@ -129,3 +129,29 @@ def test_extract_hyphenated_spellings_match_profile_skills():
     assert "machine learning" in found
     report = matcher.match(["node", "javascript"], found)
     assert "node" in report["matched"]
+
+
+def test_skill_mentions_counts_repeated_and_alias_forms():
+    posting = (
+        "Kubernetes engineer. We run Kubernetes at scale and our k8s "
+        "clusters need a Kubernetes-minded SRE."
+    )
+    mentions = matcher.skill_mentions(posting, ["kubernetes", "python"])
+    assert mentions["kubernetes"] == 3  # 2x whole-token "kubernetes" + 1x "k8s"
+    assert mentions["python"] == 0
+
+
+def test_skill_mentions_multiword_counts_substrings():
+    posting = "Machine learning team; machine learning is our core product."
+    mentions = matcher.skill_mentions(posting, ["machine learning"])
+    assert mentions["machine learning"] == 2
+
+
+def test_skill_mentions_uses_same_rules_as_extractor():
+    # "go" as a plain English word is found by extract_required_skills too
+    # (a known token-matching limitation); mentions must stay consistent
+    # with the extractor rather than silently disagreeing.
+    posting = "We go the extra mile for our customers. Golang a plus."
+    assert "go" in matcher.extract_required_skills(posting)
+    mentions = matcher.skill_mentions(posting, ["go"])
+    assert mentions["go"] == 2  # the English "go" token + the "golang" alias

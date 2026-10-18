@@ -28,6 +28,7 @@ Requirements: Python 3.10+, `pyyaml`, `pytest` (for tests).
 
 ```bash
 applymap init-profile        # writes ~/.applymap/profile.yaml — edit it with your real details
+applymap check-profile       # validate it: warns about gaps the matcher needs
 ```
 
 2. Save a job posting to a text file, then analyze it:
@@ -56,6 +57,7 @@ Missing skills:
 ```bash
 applymap rank posting-a.txt posting-b.txt posting-c.txt
 applymap rank posting-*.txt --csv ranking.csv   # also save to a spreadsheet
+applymap rank posting-*.txt --min-score 60      # hide postings below 60/100
 ```
 
 4. Track the jobs you apply to:
@@ -74,6 +76,7 @@ List what you've applied to (newest first), optionally filtered by status:
 ```bash
 applymap applications
 applymap applications --status interview
+applymap applications --json   # machine-readable records for scripting
 ```
 
 5. AI features (optional, need an API key):

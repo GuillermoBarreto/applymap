@@ -62,7 +62,9 @@ def cmd_init_profile(args: argparse.Namespace) -> int:
 def cmd_analyze(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
     posting = _read_posting(args.posting)
-    report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
+    required = matcher.extract_required_skills(posting)
+    report = matcher.match(prof["skills"], required)
+    report["mentions"] = matcher.skill_mentions(posting, required)
 
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
@@ -73,11 +75,11 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if report["matched"]:
         print("Matched skills:")
         for s in report["matched"]:
-            print(f"  + {s}")
+            print(f"  + {s} (mentioned {report['mentions'][s]}x)")
     if report["missing"]:
         print("\nMissing skills:")
         for s in report["missing"]:
-            print(f"  - {s}")
+            print(f"  - {s} (mentioned {report['mentions'][s]}x)")
     if not report["required"]:
         print("(No recognizable tech skills found in the posting.)")
         return 0
@@ -101,9 +103,13 @@ def cmd_rank(args: argparse.Namespace) -> int:
     for path in args.postings:
         postings.append((Path(path).stem, _read_posting(path)))
     ranked = matcher.rank_postings(prof["skills"], postings)
+    hidden = [r for r in ranked if r["score"] < args.min_score]
+    ranked = [r for r in ranked if r["score"] >= args.min_score]
     for r in ranked:
         print(f"{r['score']:>3}/100  {r['label']}  "
               f"({len(r['matched'])}/{len(r['required'])} skills)")
+    if hidden:
+        print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
     if args.csv:
         _write_rank_csv(args.csv, ranked)
         print(f"Wrote ranking to {args.csv}")
@@ -112,7 +118,9 @@ def cmd_rank(args: argparse.Namespace) -> int:
 
 def _write_rank_csv(path: str, ranked: list) -> None:
     """Write ranked posting results to a CSV file for spreadsheets."""
-    out = Path(path)
+    # Expand ~ like the posting inputs do, so `--csv ~/reports/r.csv`
+    # doesn't create a literal "~" directory.
+    out = Path(path).expanduser()
     # So `--csv reports/ranking.csv` works without pre-creating the folder.
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="", encoding="utf-8") as fh:
@@ -222,6 +230,10 @@ def cmd_applications(args: argparse.Namespace) -> int:
     entries = _load_applications()
     if args.status:
         entries = [e for e in entries if e.get("status") == args.status]
+    if args.json:
+        # Machine-readable output for scripting (e.g. piping into jq).
+        print(json.dumps(entries, indent=2))
+        return 0
     if not entries:
         if args.status:
             print(f"No applications with status '{args.status}' tracked yet.")
@@ -245,13 +257,72 @@ def cmd_cover_letter(args: argparse.Namespace) -> int:
     posting = _read_posting(args.posting)
     letter = draft_cover_letter(prof, posting, args.company, args.role)
     if args.output:
-        out = Path(args.output)
+        # Expand ~ like the posting inputs do (see _read_posting), so
+        # `--output ~/letters/acme.md` doesn't create a literal "~" dir.
+        out = Path(args.output).expanduser()
         # Like `rank --csv`: don't fail when the target folder doesn't exist yet.
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(letter + "\n", encoding="utf-8")
         print(f"Wrote cover letter to {args.output}")
     else:
         print(letter)
+    return 0
+
+
+def _score_type(value: str) -> int:
+    """argparse type for 0-100 score thresholds like --min-score."""
+    try:
+        score = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if not 0 <= score <= 100:
+        raise argparse.ArgumentTypeError(f"{value!r} is not between 0 and 100")
+    return score
+
+
+def cmd_check_profile(args: argparse.Namespace) -> int:
+    """Validate the profile and report gaps the matcher and AI need filled.
+
+    Exits 1 when anything is missing so it can gate scripts; exits 0
+    with "Profile looks good." when the profile is complete.
+    """
+    prof = profile_mod.load_profile(args.profile)
+    warnings = []
+    if not prof.get("name"):
+        warnings.append(
+            "name is empty — set it so cover letters address you correctly."
+        )
+    if not prof.get("headline"):
+        warnings.append(
+            "headline is empty — one line about who you are sharpens AI prompts."
+        )
+    skills = prof.get("skills", [])
+    if not skills:
+        warnings.append(
+            "no skills listed — analyze and track scores will always be 0."
+        )
+    else:
+        unknown = [
+            s for s in skills
+            if matcher.canonicalize(s) not in matcher.SKILL_TOKENS
+        ]
+        if unknown:
+            warnings.append(
+                "these skills aren't in the matcher's vocabulary and will "
+                f"never match a posting: {', '.join(unknown)}"
+            )
+    if not prof.get("target_roles"):
+        warnings.append("no target_roles listed — add the roles you're aiming for.")
+    if not prof.get("experience"):
+        warnings.append(
+            "no experience entries — cover letters are built from these facts."
+        )
+    if warnings:
+        print("Profile issues found:")
+        for w in warnings:
+            print(f"  - {w}")
+        return 1
+    print("Profile looks good.")
     return 0
 
 
@@ -268,6 +339,10 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--force", action="store_true")
     pi.set_defaults(func=cmd_init_profile)
 
+    pk = sub.add_parser("check-profile", help="Validate your profile for gaps.")
+    pk.add_argument("--profile", default=None)
+    pk.set_defaults(func=cmd_check_profile)
+
     pa = sub.add_parser("analyze", help="Score one posting against your profile.")
     pa.add_argument("posting", help="Path to the job posting text file.")
     pa.add_argument("--profile", default=None)
@@ -281,6 +356,8 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--profile", default=None)
     pr.add_argument("--csv", default=None, metavar="PATH",
                     help="Also write the ranking to a CSV file.")
+    pr.add_argument("--min-score", default=0, type=_score_type, metavar="0-100",
+                    help="Hide postings scoring below this fit score.")
     pr.set_defaults(func=cmd_rank)
 
     pc = sub.add_parser("cover-letter", help="Draft a tailored cover letter (needs API key).")
@@ -305,6 +382,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--status", default=None,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Only show applications with this status.")
+    ps.add_argument("--json", action="store_true",
+                    help="Print the tracked records as JSON instead of text.")
     ps.set_defaults(func=cmd_applications)
 
     return p
