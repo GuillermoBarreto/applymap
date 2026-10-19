@@ -155,3 +155,21 @@ def test_skill_mentions_uses_same_rules_as_extractor():
     assert "go" in matcher.extract_required_skills(posting)
     mentions = matcher.skill_mentions(posting, ["go"])
     assert mentions["go"] == 2  # the English "go" token + the "golang" alias
+
+
+def test_extract_resolves_fused_js_spellings():
+    found = matcher.extract_required_skills(
+        "We need a NodeJS developer with ReactJS and VueJS experience."
+    )
+    assert "node" in found
+    assert "react" in found
+    assert "vue" in found
+    assert "nodejs" not in found
+    assert "reactjs" not in found
+    assert "vuejs" not in found
+
+
+def test_skill_mentions_counts_fused_spellings():
+    posting = "NodeJS role: NodeJS and Node.js experience with NodeJS stack."
+    mentions = matcher.skill_mentions(posting, ["node"])
+    assert mentions["node"] == 4  # nodejs x3 + node.js x1

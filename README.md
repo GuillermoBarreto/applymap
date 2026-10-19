@@ -105,7 +105,9 @@ Skill aliases: the matcher treats common alternate names as the same skill
 `postgresql`, and so on — on both the profile and the posting side, so
 equivalent wording never costs you points. Hyphenated spellings are
 covered too: `REST-API` counts as `rest`, `CI-CD` as `ci/cd`,
-`machine-learning` as `machine learning`.
+`machine-learning` as `machine learning`. Fused JS-ecosystem spellings
+also resolve: `NodeJS` counts as `node`, `ReactJS` as `react`,
+`VueJS` as `vue`.
 
 ## Roadmap
 
