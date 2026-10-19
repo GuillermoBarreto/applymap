@@ -582,6 +582,72 @@ def test_applications_json_respects_status_filter(tmp_path, monkeypatch, capsys)
     assert entries[0]["company"] == "Globex"
 
 
+def test_parser_has_update_status_subcommand():
+    parser = build_parser()
+    subparsers = parser._subparsers._group_actions[0]
+    assert "update-status" in subparsers.choices
+    assert callable(subparsers.choices["update-status"].get_default("func"))
+
+
+def test_update_status_changes_record(tmp_path, monkeypatch, capsys):
+    import json
+
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    acme = [e for e in entries if e["company"] == "Acme"][0]
+    assert acme["status"] == "interview"
+    assert "Updated Acme" in capsys.readouterr().out
+
+
+def test_update_status_matches_case_insensitively(tmp_path, monkeypatch):
+    import json
+
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "  ACME ", "--role", "backend dev",
+               "--status", "rejected"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert [e for e in entries if e["company"] == "Acme"][0]["status"] == "rejected"
+
+
+def test_update_status_not_found_is_friendly_error(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Nope", "--role", "Dev",
+               "--status", "offer"])
+    assert rc == 1
+    assert "No tracked application" in capsys.readouterr().out
+
+
+def test_update_status_ambiguous_match_lists_candidates(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied"},
+                {"date": "2026-10-11", "company": "Acme", "role": "Backend Dev",
+                 "score": 50, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Multiple applications" in out
+    # Neither record is changed when the match is ambiguous.
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert all(e["status"] == "applied" for e in entries)
+
+
 def test_applications_json_empty_log(tmp_path, monkeypatch, capsys):
     import json
 

@@ -249,6 +249,38 @@ def cmd_applications(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_application_indexes(entries: list, company: str, role: str) -> list:
+    """Indexes of entries matching the company/role, normalized like _already_tracked."""
+    company, role = _norm_identity(company), _norm_identity(role)
+    return [
+        i for i, entry in enumerate(entries)
+        if _norm_identity(entry.get("company")) == company
+        and _norm_identity(entry.get("role")) == role
+    ]
+
+
+def cmd_update_status(args: argparse.Namespace) -> int:
+    """Change the status of a tracked application, e.g. applied -> interview."""
+    entries = _load_applications()
+    matches = _find_application_indexes(entries, args.company, args.role)
+    if not matches:
+        print(f"No tracked application for '{args.company}' — '{args.role}'. "
+              f"Log it first with `applymap track`.")
+        return 1
+    if len(matches) > 1:
+        print(f"Multiple applications match '{args.company}' — '{args.role}':")
+        for i in matches:
+            e = entries[i]
+            print(f"  {e.get('date', '?')}  {e.get('score', '?')}/100  "
+                  f"[{e.get('status', '?')}]")
+        print("Re-run with a more specific company/role.")
+        return 1
+    entries[matches[0]]["status"] = args.status
+    TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
+    return 0
+
+
 def cmd_cover_letter(args: argparse.Namespace) -> int:
     if not is_configured():
         print("Cover letters need APPLYMAP_API_KEY set to an OpenAI-compatible key.")
@@ -377,6 +409,14 @@ def build_parser() -> argparse.ArgumentParser:
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Application status.")
     pt.set_defaults(func=cmd_track)
+
+    pu = sub.add_parser("update-status", help="Change a tracked application's status.")
+    pu.add_argument("--company", required=True, help="Company name (matches track --company).")
+    pu.add_argument("--role", required=True, help="Role title (matches track --role).")
+    pu.add_argument("--status", required=True,
+                    choices=["interested", "applied", "interview", "offer", "rejected"],
+                    help="New status.")
+    pu.set_defaults(func=cmd_update_status)
 
     ps = sub.add_parser("applications", help="List tracked applications.")
     ps.add_argument("--status", default=None,

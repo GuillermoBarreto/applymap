@@ -79,6 +79,12 @@ applymap applications --status interview
 applymap applications --json   # machine-readable records for scripting
 ```
 
+Move an application through the pipeline as it progresses:
+
+```bash
+applymap update-status --company "Acme" --role "Backend Engineer" --status interview
+```
+
 5. AI features (optional, need an API key):
 
 ```bash
