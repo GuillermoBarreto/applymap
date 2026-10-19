@@ -70,7 +70,9 @@ applymap track posting-a.txt --company "Acme" --role "Backend Engineer"
 `track` records the date, company, role, fit score, and status
 (`interested`/`applied`/`interview`/`offer`/`rejected`) in
 `~/.applymap/applications.json` — one JSON list you can open in any editor.
-Set `APPLYMAP_DATA_DIR` to move it elsewhere.
+Set `APPLYMAP_DATA_DIR` to move it elsewhere. When a posting contains no
+recognizable tech skills, `track` warns you instead of silently logging a
+meaningless 0/100.
 
 List what you've applied to (newest first), optionally filtered by status:
 

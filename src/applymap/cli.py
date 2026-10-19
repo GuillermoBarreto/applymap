@@ -158,6 +158,11 @@ def cmd_track(args: argparse.Namespace) -> int:
     # the right file when applymap runs from a different directory.
     posting_path = str(Path(args.posting).expanduser().resolve())
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
+    if not report["required"]:
+        # A 0/100 from "no recognizable skills" is not a real mismatch —
+        # say so instead of silently logging a meaningless score.
+        print("(No recognizable tech skills found in the posting — "
+              "the 0/100 score means nothing was matched.)")
     record = {
         "date": datetime.date.today().isoformat(),
         "company": args.company or "",

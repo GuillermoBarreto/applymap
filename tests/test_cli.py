@@ -681,6 +681,37 @@ def test_update_status_ambiguous_match_lists_candidates(tmp_path, monkeypatch, c
     assert all(e["status"] == "applied" for e in entries)
 
 
+def test_track_warns_when_no_skills_recognized(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "vague.txt"
+    posting_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Vague", "--role", "Person"])
+    assert rc == 0
+    assert "No recognizable tech skills" in capsys.readouterr().out
+    # The application is still logged — the warning is informational only.
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    assert entries[0]["score"] == 0
+
+
+def test_track_no_warning_when_skills_found(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 0
+    assert "No recognizable tech skills" not in capsys.readouterr().out
+
+
 def test_applications_json_empty_log(tmp_path, monkeypatch, capsys):
     import json
 
