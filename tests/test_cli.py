@@ -491,6 +491,39 @@ def test_cover_letter_output_expands_home(tmp_path, monkeypatch):
     assert not (tmp_path / "~").exists()
 
 
+def test_rank_json_output(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--json"])
+    assert rc == 0
+    ranked = json.loads(capsys.readouterr().out)
+    assert ranked[0]["label"] == "good"
+    assert ranked[1]["label"] == "bad"
+    assert ranked[0]["score"] >= ranked[1]["score"]
+    assert "matched" in ranked[0] and "missing" in ranked[0]
+
+
+def test_rank_json_respects_min_score(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--json", "--min-score", "50"])
+    assert rc == 0
+    ranked = json.loads(capsys.readouterr().out)
+    assert [r["label"] for r in ranked] == ["good"]
+
+
 def _write_sparse_profile(tmp_path, **overrides):
     import yaml
 

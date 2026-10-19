@@ -105,11 +105,15 @@ def cmd_rank(args: argparse.Namespace) -> int:
     ranked = matcher.rank_postings(prof["skills"], postings)
     hidden = [r for r in ranked if r["score"] < args.min_score]
     ranked = [r for r in ranked if r["score"] >= args.min_score]
-    for r in ranked:
-        print(f"{r['score']:>3}/100  {r['label']}  "
-              f"({len(r['matched'])}/{len(r['required'])} skills)")
-    if hidden:
-        print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
+    if args.json:
+        # Machine-readable output for scripting (e.g. piping into jq).
+        print(json.dumps(ranked, indent=2))
+    else:
+        for r in ranked:
+            print(f"{r['score']:>3}/100  {r['label']}  "
+                  f"({len(r['matched'])}/{len(r['required'])} skills)")
+        if hidden:
+            print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
     if args.csv:
         _write_rank_csv(args.csv, ranked)
         print(f"Wrote ranking to {args.csv}")
@@ -390,6 +394,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Also write the ranking to a CSV file.")
     pr.add_argument("--min-score", default=0, type=_score_type, metavar="0-100",
                     help="Hide postings scoring below this fit score.")
+    pr.add_argument("--json", action="store_true",
+                    help="Print the ranking as JSON instead of text.")
     pr.set_defaults(func=cmd_rank)
 
     pc = sub.add_parser("cover-letter", help="Draft a tailored cover letter (needs API key).")

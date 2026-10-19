@@ -58,6 +58,7 @@ Missing skills:
 applymap rank posting-a.txt posting-b.txt posting-c.txt
 applymap rank posting-*.txt --csv ranking.csv   # also save to a spreadsheet
 applymap rank posting-*.txt --min-score 60      # hide postings below 60/100
+applymap rank posting-*.txt --json              # machine-readable ranking for scripting
 ```
 
 4. Track the jobs you apply to:
