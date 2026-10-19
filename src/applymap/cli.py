@@ -105,11 +105,15 @@ def cmd_rank(args: argparse.Namespace) -> int:
     ranked = matcher.rank_postings(prof["skills"], postings)
     hidden = [r for r in ranked if r["score"] < args.min_score]
     ranked = [r for r in ranked if r["score"] >= args.min_score]
-    for r in ranked:
-        print(f"{r['score']:>3}/100  {r['label']}  "
-              f"({len(r['matched'])}/{len(r['required'])} skills)")
-    if hidden:
-        print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
+    if args.json:
+        # Machine-readable output for scripting (e.g. piping into jq).
+        print(json.dumps(ranked, indent=2))
+    else:
+        for r in ranked:
+            print(f"{r['score']:>3}/100  {r['label']}  "
+                  f"({len(r['matched'])}/{len(r['required'])} skills)")
+        if hidden:
+            print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
     if args.csv:
         _write_rank_csv(args.csv, ranked)
         print(f"Wrote ranking to {args.csv}")
@@ -154,6 +158,11 @@ def cmd_track(args: argparse.Namespace) -> int:
     # the right file when applymap runs from a different directory.
     posting_path = str(Path(args.posting).expanduser().resolve())
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
+    if not report["required"]:
+        # A 0/100 from "no recognizable skills" is not a real mismatch —
+        # say so instead of silently logging a meaningless score.
+        print("(No recognizable tech skills found in the posting — "
+              "the 0/100 score means nothing was matched.)")
     record = {
         "date": datetime.date.today().isoformat(),
         "company": args.company or "",
@@ -246,6 +255,38 @@ def cmd_applications(args: argparse.Namespace) -> int:
         print(f"{e.get('date', '?')}  {e.get('score', '?')}/100  "
               f"{company} — {role}  [{e.get('status', '?')}]")
     print(f"\n{len(entries)} application(s) tracked.")
+    return 0
+
+
+def _find_application_indexes(entries: list, company: str, role: str) -> list:
+    """Indexes of entries matching the company/role, normalized like _already_tracked."""
+    company, role = _norm_identity(company), _norm_identity(role)
+    return [
+        i for i, entry in enumerate(entries)
+        if _norm_identity(entry.get("company")) == company
+        and _norm_identity(entry.get("role")) == role
+    ]
+
+
+def cmd_update_status(args: argparse.Namespace) -> int:
+    """Change the status of a tracked application, e.g. applied -> interview."""
+    entries = _load_applications()
+    matches = _find_application_indexes(entries, args.company, args.role)
+    if not matches:
+        print(f"No tracked application for '{args.company}' — '{args.role}'. "
+              f"Log it first with `applymap track`.")
+        return 1
+    if len(matches) > 1:
+        print(f"Multiple applications match '{args.company}' — '{args.role}':")
+        for i in matches:
+            e = entries[i]
+            print(f"  {e.get('date', '?')}  {e.get('score', '?')}/100  "
+                  f"[{e.get('status', '?')}]")
+        print("Re-run with a more specific company/role.")
+        return 1
+    entries[matches[0]]["status"] = args.status
+    TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
     return 0
 
 
@@ -358,6 +399,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Also write the ranking to a CSV file.")
     pr.add_argument("--min-score", default=0, type=_score_type, metavar="0-100",
                     help="Hide postings scoring below this fit score.")
+    pr.add_argument("--json", action="store_true",
+                    help="Print the ranking as JSON instead of text.")
     pr.set_defaults(func=cmd_rank)
 
     pc = sub.add_parser("cover-letter", help="Draft a tailored cover letter (needs API key).")
@@ -377,6 +420,14 @@ def build_parser() -> argparse.ArgumentParser:
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Application status.")
     pt.set_defaults(func=cmd_track)
+
+    pu = sub.add_parser("update-status", help="Change a tracked application's status.")
+    pu.add_argument("--company", required=True, help="Company name (matches track --company).")
+    pu.add_argument("--role", required=True, help="Role title (matches track --role).")
+    pu.add_argument("--status", required=True,
+                    choices=["interested", "applied", "interview", "offer", "rejected"],
+                    help="New status.")
+    pu.set_defaults(func=cmd_update_status)
 
     ps = sub.add_parser("applications", help="List tracked applications.")
     ps.add_argument("--status", default=None,

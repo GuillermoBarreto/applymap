@@ -491,6 +491,39 @@ def test_cover_letter_output_expands_home(tmp_path, monkeypatch):
     assert not (tmp_path / "~").exists()
 
 
+def test_rank_json_output(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--json"])
+    assert rc == 0
+    ranked = json.loads(capsys.readouterr().out)
+    assert ranked[0]["label"] == "good"
+    assert ranked[1]["label"] == "bad"
+    assert ranked[0]["score"] >= ranked[1]["score"]
+    assert "matched" in ranked[0] and "missing" in ranked[0]
+
+
+def test_rank_json_respects_min_score(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--json", "--min-score", "50"])
+    assert rc == 0
+    ranked = json.loads(capsys.readouterr().out)
+    assert [r["label"] for r in ranked] == ["good"]
+
+
 def _write_sparse_profile(tmp_path, **overrides):
     import yaml
 
@@ -580,6 +613,103 @@ def test_applications_json_respects_status_filter(tmp_path, monkeypatch, capsys)
     entries = json.loads(capsys.readouterr().out)
     assert len(entries) == 1
     assert entries[0]["company"] == "Globex"
+
+
+def test_parser_has_update_status_subcommand():
+    parser = build_parser()
+    subparsers = parser._subparsers._group_actions[0]
+    assert "update-status" in subparsers.choices
+    assert callable(subparsers.choices["update-status"].get_default("func"))
+
+
+def test_update_status_changes_record(tmp_path, monkeypatch, capsys):
+    import json
+
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    acme = [e for e in entries if e["company"] == "Acme"][0]
+    assert acme["status"] == "interview"
+    assert "Updated Acme" in capsys.readouterr().out
+
+
+def test_update_status_matches_case_insensitively(tmp_path, monkeypatch):
+    import json
+
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "  ACME ", "--role", "backend dev",
+               "--status", "rejected"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert [e for e in entries if e["company"] == "Acme"][0]["status"] == "rejected"
+
+
+def test_update_status_not_found_is_friendly_error(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Nope", "--role", "Dev",
+               "--status", "offer"])
+    assert rc == 1
+    assert "No tracked application" in capsys.readouterr().out
+
+
+def test_update_status_ambiguous_match_lists_candidates(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied"},
+                {"date": "2026-10-11", "company": "Acme", "role": "Backend Dev",
+                 "score": 50, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Multiple applications" in out
+    # Neither record is changed when the match is ambiguous.
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert all(e["status"] == "applied" for e in entries)
+
+
+def test_track_warns_when_no_skills_recognized(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "vague.txt"
+    posting_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Vague", "--role", "Person"])
+    assert rc == 0
+    assert "No recognizable tech skills" in capsys.readouterr().out
+    # The application is still logged — the warning is informational only.
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    assert entries[0]["score"] == 0
+
+
+def test_track_no_warning_when_skills_found(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 0
+    assert "No recognizable tech skills" not in capsys.readouterr().out
 
 
 def test_applications_json_empty_log(tmp_path, monkeypatch, capsys):

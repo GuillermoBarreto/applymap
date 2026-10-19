@@ -58,6 +58,7 @@ Missing skills:
 applymap rank posting-a.txt posting-b.txt posting-c.txt
 applymap rank posting-*.txt --csv ranking.csv   # also save to a spreadsheet
 applymap rank posting-*.txt --min-score 60      # hide postings below 60/100
+applymap rank posting-*.txt --json              # machine-readable ranking for scripting
 ```
 
 4. Track the jobs you apply to:
@@ -69,7 +70,9 @@ applymap track posting-a.txt --company "Acme" --role "Backend Engineer"
 `track` records the date, company, role, fit score, and status
 (`interested`/`applied`/`interview`/`offer`/`rejected`) in
 `~/.applymap/applications.json` — one JSON list you can open in any editor.
-Set `APPLYMAP_DATA_DIR` to move it elsewhere.
+Set `APPLYMAP_DATA_DIR` to move it elsewhere. When a posting contains no
+recognizable tech skills, `track` warns you instead of silently logging a
+meaningless 0/100.
 
 List what you've applied to (newest first), optionally filtered by status:
 
@@ -77,6 +80,12 @@ List what you've applied to (newest first), optionally filtered by status:
 applymap applications
 applymap applications --status interview
 applymap applications --json   # machine-readable records for scripting
+```
+
+Move an application through the pipeline as it progresses:
+
+```bash
+applymap update-status --company "Acme" --role "Backend Engineer" --status interview
 ```
 
 5. AI features (optional, need an API key):
@@ -98,7 +107,9 @@ Skill aliases: the matcher treats common alternate names as the same skill
 `postgresql`, and so on — on both the profile and the posting side, so
 equivalent wording never costs you points. Hyphenated spellings are
 covered too: `REST-API` counts as `rest`, `CI-CD` as `ci/cd`,
-`machine-learning` as `machine learning`.
+`machine-learning` as `machine learning`. Fused JS-ecosystem spellings
+also resolve: `NodeJS` counts as `node`, `ReactJS` as `react`,
+`VueJS` as `vue`.
 
 ## Roadmap
 

@@ -51,6 +51,10 @@ SKILL_ALIASES = {
     "ci cd": "ci/cd",
     "github actions": "github actions",
     "golang": "go",
+    # Fused spellings common in postings: "NodeJS developer".
+    "nodejs": "node",
+    "reactjs": "react",
+    "vuejs": "vue",
 }
 
 
