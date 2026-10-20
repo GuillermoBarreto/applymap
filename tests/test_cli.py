@@ -780,3 +780,24 @@ def test_export_empty_log_writes_header_only(tmp_path, monkeypatch):
 
 def test_parser_has_export_subcommand():
     assert "export" in build_parser()._subparsers._group_actions[0].choices
+
+
+def test_read_posting_bad_encoding_is_friendly_error(tmp_path, capsys):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    bad = tmp_path / "posting.bin"
+    bad.write_bytes(b"\xff\xfe\x00not text")
+    rc = main(["analyze", str(bad), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "not valid UTF-8" in capsys.readouterr().err
+
+
+def test_read_posting_bad_encoding_on_track_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    bad = tmp_path / "posting.bin"
+    bad.write_bytes(b"\xff\xfe\x00not text")
+    rc = main(["track", str(bad), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "not valid UTF-8" in capsys.readouterr().err

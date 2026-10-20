@@ -23,6 +23,11 @@ def _read_posting(path: str) -> str:
         raise FileNotFoundError(
             f"Posting file not found: {resolved}. Check the path and try again."
         )
+    except UnicodeDecodeError:
+        raise RuntimeError(
+            f"Posting file {resolved} is not valid UTF-8 text. "
+            "Save it as plain UTF-8 text and try again."
+        )
 
 
 def cmd_init_profile(args: argparse.Namespace) -> int:
