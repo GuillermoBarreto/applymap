@@ -61,6 +61,10 @@ applymap rank posting-*.txt --min-score 60      # hide postings below 60/100
 applymap rank posting-*.txt --json              # machine-readable ranking for scripting
 ```
 
+Postings that tie on fit score are ordered by how often the matched
+skills appear in the posting text — a posting that mentions Python five
+times ranks above one that mentions it once.
+
 4. Track the jobs you apply to:
 
 ```bash
