@@ -742,3 +742,41 @@ def test_stats_summarizes_by_status_average_and_best_fit(tmp_path, monkeypatch, 
 
 def test_parser_has_stats_subcommand():
     assert "stats" in build_parser()._subparsers._group_actions[0].choices
+
+
+def test_export_writes_csv_with_header_and_rows(tmp_path, monkeypatch, capsys):
+    import csv
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    out = tmp_path / "apps.csv"
+    rc = main(["export", "--csv", str(out)])
+    assert rc == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert rows[0] == ["date", "company", "role", "status", "score",
+                       "matched_skills", "missing_skills", "posting"]
+    assert rows[1][1:5] == ["Acme", "Backend Dev", "applied", "67"]
+    assert rows[2][1:5] == ["Globex", "SDE", "interview", "82"]
+    assert "Wrote 2 application(s)" in capsys.readouterr().out
+
+
+def test_export_creates_parent_dirs_and_expands_home(tmp_path, monkeypatch):
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = main(["export", "--csv", "~/reports/apps.csv"])
+    assert rc == 0
+    assert (tmp_path / "reports" / "apps.csv").exists()
+
+
+def test_export_empty_log_writes_header_only(tmp_path, monkeypatch):
+    import csv
+
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    out = tmp_path / "apps.csv"
+    rc = main(["export", "--csv", str(out)])
+    assert rc == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert len(rows) == 1  # header only
+
+
+def test_parser_has_export_subcommand():
+    assert "export" in build_parser()._subparsers._group_actions[0].choices

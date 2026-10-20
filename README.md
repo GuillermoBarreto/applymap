@@ -95,6 +95,12 @@ average fit score, and the best-fit application:
 applymap stats
 ```
 
+Export the whole log to a spreadsheet:
+
+```bash
+applymap export --csv applications.csv
+```
+
 5. AI features (optional, need an API key):
 
 ```bash
