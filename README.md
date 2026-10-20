@@ -88,6 +88,13 @@ Move an application through the pipeline as it progresses:
 applymap update-status --company "Acme" --role "Backend Engineer" --status interview
 ```
 
+Get a quick summary of your pipeline — total tracked, counts by status,
+average fit score, and the best-fit application:
+
+```bash
+applymap stats
+```
+
 5. AI features (optional, need an API key):
 
 ```bash

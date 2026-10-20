@@ -719,3 +719,26 @@ def test_applications_json_empty_log(tmp_path, monkeypatch, capsys):
     rc = main(["applications", "--json"])
     assert rc == 0
     assert json.loads(capsys.readouterr().out) == []
+
+
+def test_stats_empty_log_message(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    rc = main(["stats"])
+    assert rc == 0
+    assert "No applications tracked yet" in capsys.readouterr().out
+
+
+def test_stats_summarizes_by_status_average_and_best_fit(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["stats"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "2 application(s) tracked" in out
+    assert "applied: 1" in out
+    assert "interview: 1" in out
+    assert "Average fit score: 74/100" in out  # round((67 + 82) / 2)
+    assert "Best fit: Globex — SDE (82/100)" in out
+
+
+def test_parser_has_stats_subcommand():
+    assert "stats" in build_parser()._subparsers._group_actions[0].choices
