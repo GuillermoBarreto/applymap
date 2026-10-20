@@ -719,3 +719,85 @@ def test_applications_json_empty_log(tmp_path, monkeypatch, capsys):
     rc = main(["applications", "--json"])
     assert rc == 0
     assert json.loads(capsys.readouterr().out) == []
+
+
+def test_stats_empty_log_message(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    rc = main(["stats"])
+    assert rc == 0
+    assert "No applications tracked yet" in capsys.readouterr().out
+
+
+def test_stats_summarizes_by_status_average_and_best_fit(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["stats"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "2 application(s) tracked" in out
+    assert "applied: 1" in out
+    assert "interview: 1" in out
+    assert "Average fit score: 74/100" in out  # round((67 + 82) / 2)
+    assert "Best fit: Globex — SDE (82/100)" in out
+
+
+def test_parser_has_stats_subcommand():
+    assert "stats" in build_parser()._subparsers._group_actions[0].choices
+
+
+def test_export_writes_csv_with_header_and_rows(tmp_path, monkeypatch, capsys):
+    import csv
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    out = tmp_path / "apps.csv"
+    rc = main(["export", "--csv", str(out)])
+    assert rc == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert rows[0] == ["date", "company", "role", "status", "score",
+                       "matched_skills", "missing_skills", "posting"]
+    assert rows[1][1:5] == ["Acme", "Backend Dev", "applied", "67"]
+    assert rows[2][1:5] == ["Globex", "SDE", "interview", "82"]
+    assert "Wrote 2 application(s)" in capsys.readouterr().out
+
+
+def test_export_creates_parent_dirs_and_expands_home(tmp_path, monkeypatch):
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    rc = main(["export", "--csv", "~/reports/apps.csv"])
+    assert rc == 0
+    assert (tmp_path / "reports" / "apps.csv").exists()
+
+
+def test_export_empty_log_writes_header_only(tmp_path, monkeypatch):
+    import csv
+
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    out = tmp_path / "apps.csv"
+    rc = main(["export", "--csv", str(out)])
+    assert rc == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert len(rows) == 1  # header only
+
+
+def test_parser_has_export_subcommand():
+    assert "export" in build_parser()._subparsers._group_actions[0].choices
+
+
+def test_read_posting_bad_encoding_is_friendly_error(tmp_path, capsys):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    bad = tmp_path / "posting.bin"
+    bad.write_bytes(b"\xff\xfe\x00not text")
+    rc = main(["analyze", str(bad), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "not valid UTF-8" in capsys.readouterr().err
+
+
+def test_read_posting_bad_encoding_on_track_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    bad = tmp_path / "posting.bin"
+    bad.write_bytes(b"\xff\xfe\x00not text")
+    rc = main(["track", str(bad), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "not valid UTF-8" in capsys.readouterr().err

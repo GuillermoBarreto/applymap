@@ -61,6 +61,10 @@ applymap rank posting-*.txt --min-score 60      # hide postings below 60/100
 applymap rank posting-*.txt --json              # machine-readable ranking for scripting
 ```
 
+Postings that tie on fit score are ordered by how often the matched
+skills appear in the posting text — a posting that mentions Python five
+times ranks above one that mentions it once.
+
 4. Track the jobs you apply to:
 
 ```bash
@@ -86,6 +90,19 @@ Move an application through the pipeline as it progresses:
 
 ```bash
 applymap update-status --company "Acme" --role "Backend Engineer" --status interview
+```
+
+Get a quick summary of your pipeline — total tracked, counts by status,
+average fit score, and the best-fit application:
+
+```bash
+applymap stats
+```
+
+Export the whole log to a spreadsheet:
+
+```bash
+applymap export --csv applications.csv
 ```
 
 5. AI features (optional, need an API key):

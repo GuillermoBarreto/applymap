@@ -42,6 +42,11 @@ def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
 def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize raw profile data into the fields applymap expects."""
     def _as_list(value):
+        if value is None:
+            # A bare `experience:` (or `skills:`) key in hand-edited YAML is
+            # None, not an empty list — treat it as empty instead of
+            # producing ["None"].
+            return []
         # A hand-edited profile might use a bare `skills: python` instead of
         # a YAML list; wrap it so we never iterate over a string's characters.
         return value if isinstance(value, list) else [value]

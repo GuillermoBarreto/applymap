@@ -173,3 +173,27 @@ def test_skill_mentions_counts_fused_spellings():
     posting = "NodeJS role: NodeJS and Node.js experience with NodeJS stack."
     mentions = matcher.skill_mentions(posting, ["node"])
     assert mentions["node"] == 4  # nodejs x3 + node.js x1
+
+
+def test_rank_tiebreak_favors_deeper_skill_mentions():
+    # Both postings score 100; the one mentioning python more often wins.
+    skills = ["python"]
+    shallow = "We need python."
+    deep = "Python python python! Python everywhere."
+    ranked = matcher.rank_postings(skills, [("shallow", shallow), ("deep", deep)])
+    assert [r["label"] for r in ranked] == ["deep", "shallow"]
+    assert all(r["score"] == 100 for r in ranked)
+
+
+def test_rank_higher_score_still_beats_mention_depth():
+    skills = ["python", "sql"]
+    fit = "We need python and sql."  # score 100
+    deep_miss = "Kubernetes kubernetes kubernetes! We also want golang."  # score 0
+    ranked = matcher.rank_postings(skills, [("deep", deep_miss), ("fit", fit)])
+    assert [r["label"] for r in ranked] == ["fit", "deep"]
+
+
+def test_rank_tiebreak_keeps_report_schema_unchanged():
+    # The tie-break must not add new keys to the report dicts.
+    ranked = matcher.rank_postings(["python"], [("a", "python"), ("b", "python python")])
+    assert set(ranked[0]) == {"score", "matched", "missing", "required", "label"}

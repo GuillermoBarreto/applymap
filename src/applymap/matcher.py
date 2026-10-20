@@ -151,10 +151,20 @@ def match(profile_skills: List[str], required: List[str]) -> Dict[str, object]:
 def rank_postings(
     profile_skills: List[str], postings: List[Tuple[str, str]]
 ) -> List[Dict[str, object]]:
-    """Rank (label, posting_text) pairs by match score, best first."""
-    results = []
+    """Rank (label, posting_text) pairs by match score, best first.
+
+    Postings tied on score are ordered by mention depth: the total number
+    of times the matched skills appear in the posting. A posting that says
+    "Python" five times is more about Python than one that says it once,
+    so it ranks first among equals. The report dicts themselves are
+    unchanged — only the order differs.
+    """
+    scored = []
     for label, text in postings:
         report = match(profile_skills, extract_required_skills(text))
         report["label"] = label
-        results.append(report)
-    return sorted(results, key=lambda r: r["score"], reverse=True)
+        mentions = skill_mentions(text, report["required"])
+        depth = sum(mentions.get(s, 0) for s in report["matched"])
+        scored.append((report, depth))
+    scored.sort(key=lambda pair: (pair[0]["score"], pair[1]), reverse=True)
+    return [report for report, _ in scored]

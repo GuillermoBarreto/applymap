@@ -23,6 +23,11 @@ def _read_posting(path: str) -> str:
         raise FileNotFoundError(
             f"Posting file not found: {resolved}. Check the path and try again."
         )
+    except UnicodeDecodeError:
+        raise RuntimeError(
+            f"Posting file {resolved} is not valid UTF-8 text. "
+            "Save it as plain UTF-8 text and try again."
+        )
 
 
 def cmd_init_profile(args: argparse.Namespace) -> int:
@@ -258,6 +263,66 @@ def cmd_applications(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    """Write tracked applications to a CSV file for spreadsheets."""
+    entries = _load_applications()
+    # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
+    # literal "~" directory; create missing parent folders too.
+    out = Path(args.csv).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow([
+            "date", "company", "role", "status", "score",
+            "matched_skills", "missing_skills", "posting",
+        ])
+        for e in entries:
+            writer.writerow([
+                e.get("date", ""),
+                e.get("company", ""),
+                e.get("role", ""),
+                e.get("status", ""),
+                e.get("score", ""),
+                "; ".join(e.get("matched_skills", [])),
+                "; ".join(e.get("missing_skills", [])),
+                e.get("posting", ""),
+            ])
+    print(f"Wrote {len(entries)} application(s) to {args.csv}")
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    """Print a summary of tracked applications: totals, status counts, best fit."""
+    entries = _load_applications()
+    if not entries:
+        print("No applications tracked yet. Log one with `applymap track`.")
+        return 0
+    counts: dict = {}
+    for e in entries:
+        status = e.get("status") or "(unknown)"
+        counts[status] = counts.get(status, 0) + 1
+    scores = [
+        e["score"] for e in entries
+        if isinstance(e.get("score"), (int, float))
+    ]
+    print(f"{len(entries)} application(s) tracked.\n")
+    print("By status:")
+    for status in sorted(counts):
+        print(f"  {status}: {counts[status]}")
+    if scores:
+        avg = round(sum(scores) / len(scores))
+        best = max(
+            entries,
+            key=lambda e: e.get("score")
+            if isinstance(e.get("score"), (int, float)) else -1,
+        )
+        company = best.get("company") or "(unknown company)"
+        role = best.get("role") or "(unknown role)"
+        print(f"\nAverage fit score: {avg}/100")
+        print(f"Best fit: {company} — {role} ({best.get('score')}/100)")
+    return 0
+
+
 def _find_application_indexes(entries: list, company: str, role: str) -> list:
     """Indexes of entries matching the company/role, normalized like _already_tracked."""
     company, role = _norm_identity(company), _norm_identity(role)
@@ -436,6 +501,14 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--json", action="store_true",
                     help="Print the tracked records as JSON instead of text.")
     ps.set_defaults(func=cmd_applications)
+
+    pst = sub.add_parser("stats", help="Summarize tracked applications.")
+    pst.set_defaults(func=cmd_stats)
+
+    pe = sub.add_parser("export", help="Export tracked applications to CSV.")
+    pe.add_argument("--csv", required=True, metavar="PATH",
+                    help="CSV file to write (creates parent folders).")
+    pe.set_defaults(func=cmd_export)
 
     return p
 
