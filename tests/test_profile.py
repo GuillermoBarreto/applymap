@@ -60,3 +60,20 @@ def test_normalize_coerces_bare_string_list_fields():
     p = normalize({"skills": "Python", "experience": "did things"})
     assert p["skills"] == ["python"]
     assert p["experience"] == ["did things"]
+
+
+def test_normalize_treats_null_fields_as_empty():
+    # A bare `experience:` key in hand-edited YAML parses as None — it must
+    # not become ["None"] (which would leak "- None" into cover letters).
+    p = profile_mod.normalize({"skills": None, "experience": None,
+                               "target_roles": None, "name": None})
+    assert p["skills"] == []
+    assert p["experience"] == []
+    assert p["target_roles"] == []
+
+
+def test_normalize_still_wraps_bare_scalar_values():
+    # Regression guard: the None fix must not break scalar wrapping.
+    p = profile_mod.normalize({"skills": "Python", "experience": "did things"})
+    assert p["skills"] == ["python"]
+    assert p["experience"] == ["did things"]
