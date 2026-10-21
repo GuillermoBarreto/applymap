@@ -801,3 +801,163 @@ def test_read_posting_bad_encoding_on_track_is_friendly_error(tmp_path, monkeypa
     rc = main(["track", str(bad), "--profile", str(profile_path)])
     assert rc == 1
     assert "not valid UTF-8" in capsys.readouterr().err
+
+
+def test_stats_prints_conversion_funnel(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "A", "role": "R", "score": 80, "status": "applied"},
+                {"date": "2026-10-02", "company": "B", "role": "R", "score": 70, "status": "applied"},
+                {"date": "2026-10-03", "company": "C", "role": "R", "score": 90, "status": "interview"},
+                {"date": "2026-10-04", "company": "D", "role": "R", "score": 85, "status": "offer"},
+                {"date": "2026-10-05", "company": "E", "role": "R", "score": 60, "status": "rejected"},
+                {"date": "2026-10-06", "company": "F", "role": "R", "score": 50, "status": "interested"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Conversion funnel" in out
+    assert "interview rate: 40% of 5" in out  # 2 interviews (interview+offer) of 5 in pipeline
+    assert "offer rate: 50% of interviews" in out  # 1 offer of 2 interviews
+
+
+def test_stats_funnel_handles_zero_interviews(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [{"date": "2026-10-01", "company": "A", "role": "R", "score": 80, "status": "applied"}]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "interview rate: 0% of 1" in out
+    assert "offer rate" not in out  # no interviews yet, so no offer rate
+
+
+def test_export_json_writes_records(tmp_path, monkeypatch, capsys):
+    _seed_applications_log(tmp_path, monkeypatch)
+    out = tmp_path / "apps.json"
+    rc = main(["export", "--csv", str(out), "--format", "json"])
+    assert rc == 0
+    import json
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert len(data) == 2
+    assert data[0]["company"] == "Acme"
+    assert "(json)" in capsys.readouterr().out
+
+
+def test_export_still_defaults_to_csv(tmp_path, monkeypatch):
+    _seed_applications_log(tmp_path, monkeypatch)
+    out = tmp_path / "apps.csv"
+    rc = main(["export", "--csv", str(out)])
+    assert rc == 0
+    header = out.read_text(encoding="utf-8").splitlines()[0]
+    assert header.startswith("date,company,role")
+
+
+def test_followup_lists_stale_applications_oldest_first(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    old = (today - datetime.timedelta(days=45)).isoformat()
+    older = (today - datetime.timedelta(days=60)).isoformat()
+    recent = (today - datetime.timedelta(days=5)).isoformat()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": old, "company": "StaleCo", "role": "Dev", "score": 80, "status": "applied"},
+                {"date": older, "company": "OlderCo", "role": "Dev", "score": 75, "status": "applied"},
+                {"date": old, "company": "InterviewCo", "role": "Dev", "score": 85, "status": "interview"},
+                {"date": recent, "company": "RecentCo", "role": "Dev", "score": 70, "status": "applied"},
+                {"date": "not-a-date", "company": "BadDateCo", "role": "Dev", "score": 60, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup"])
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if " 45d" in l or " 60d" in l]
+    assert len(lines) == 2
+    assert "OlderCo" in lines[0]  # longest waiting first
+    assert "StaleCo" in lines[1]
+    assert "InterviewCo" not in capsys.readouterr().out
+    assert "RecentCo" not in capsys.readouterr().out
+    assert "BadDateCo" not in capsys.readouterr().out  # bad date skipped, not crashed
+
+
+def test_followup_custom_days_threshold(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": (today - datetime.timedelta(days=10)).isoformat(),
+                 "company": "WeekCo", "role": "Dev", "score": 80, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--days", "7"])
+    assert rc == 0
+    assert "WeekCo" in capsys.readouterr().out
+    rc = main(["followup", "--days", "30"])
+    assert rc == 0
+    assert "All caught up" in capsys.readouterr().out
+
+
+def test_parser_has_followup_subcommand():
+    parser = build_parser()
+    args = parser.parse_args(["followup", "--days", "14"])
+    assert args.command == "followup"
+    assert args.days == 14
+
+
+def test_rank_disambiguates_identical_stems(tmp_path, monkeypatch, capsys):
+    import os
+    from applymap import cli as cli_mod
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    p1 = tmp_path / "a" / "backend.txt"
+    p2 = tmp_path / "b" / "backend.txt"
+    p1.write_text("We need Python and SQL.", encoding="utf-8")
+    p2.write_text("We need Python and Docker.", encoding="utf-8")
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("name: T\nskills: [python, sql, docker]\n", encoding="utf-8")
+    old_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        rc = main(["rank", "--profile", str(profile), str(p1), str(p2)])
+    finally:
+        os.chdir(old_cwd)
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if "/100" in l]
+    assert len(lines) == 2
+    labels = [l.split("  ")[-1].strip() if False else l for l in lines]
+    assert any("backend" in l and "(2)" not in l for l in lines)
+    assert any("backend (2)" in l for l in lines)
