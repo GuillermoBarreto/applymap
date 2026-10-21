@@ -364,7 +364,8 @@ def _print_funnel(counts: dict) -> None:
         print(f"  offer rate: {round(100 * offers / interviews)}% of interviews")
 
 
-def _find_application_indexes(entries: list, company: str, role: str) -> list:    """Indexes of entries matching the company/role, normalized like _already_tracked."""
+def _find_application_indexes(entries: list, company: str, role: str) -> list:
+    """Indexes of entries matching the company/role, normalized like _already_tracked."""
     company, role = _norm_identity(company), _norm_identity(role)
     return [
         i for i, entry in enumerate(entries)
