@@ -264,30 +264,33 @@ def cmd_applications(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    """Write tracked applications to a CSV file for spreadsheets."""
+    """Write tracked applications to a CSV or JSON file for spreadsheets/scripts."""
     entries = _load_applications()
     # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
     # literal "~" directory; create missing parent folders too.
     out = Path(args.csv).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow([
-            "date", "company", "role", "status", "score",
-            "matched_skills", "missing_skills", "posting",
-        ])
-        for e in entries:
+    if args.format == "json":
+        out.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+    else:
+        with open(out, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
             writer.writerow([
-                e.get("date", ""),
-                e.get("company", ""),
-                e.get("role", ""),
-                e.get("status", ""),
-                e.get("score", ""),
-                "; ".join(e.get("matched_skills", [])),
-                "; ".join(e.get("missing_skills", [])),
-                e.get("posting", ""),
+                "date", "company", "role", "status", "score",
+                "matched_skills", "missing_skills", "posting",
             ])
-    print(f"Wrote {len(entries)} application(s) to {args.csv}")
+            for e in entries:
+                writer.writerow([
+                    e.get("date", ""),
+                    e.get("company", ""),
+                    e.get("role", ""),
+                    e.get("status", ""),
+                    e.get("score", ""),
+                    "; ".join(e.get("matched_skills", [])),
+                    "; ".join(e.get("missing_skills", [])),
+                    e.get("posting", ""),
+                ])
+    print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
 
 
@@ -526,9 +529,11 @@ def build_parser() -> argparse.ArgumentParser:
     pst = sub.add_parser("stats", help="Summarize tracked applications.")
     pst.set_defaults(func=cmd_stats)
 
-    pe = sub.add_parser("export", help="Export tracked applications to CSV.")
+    pe = sub.add_parser("export", help="Export tracked applications to CSV or JSON.")
     pe.add_argument("--csv", required=True, metavar="PATH",
-                    help="CSV file to write (creates parent folders).")
+                    help="File to write (creates parent folders).")
+    pe.add_argument("--format", default="csv", choices=["csv", "json"],
+                    help="Export format (default: csv).")
     pe.set_defaults(func=cmd_export)
 
     return p
