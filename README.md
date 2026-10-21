@@ -93,16 +93,25 @@ applymap update-status --company "Acme" --role "Backend Engineer" --status inter
 ```
 
 Get a quick summary of your pipeline — total tracked, counts by status,
-average fit score, and the best-fit application:
+average fit score, the best-fit application, and the applied → interview →
+offer conversion funnel:
 
 ```bash
 applymap stats
+```
+
+Find applications that have been waiting too long for a response:
+
+```bash
+applymap followup            # 'applied' 30+ days with no status change
+applymap followup --days 14  # flag anything waiting 2 weeks or more
 ```
 
 Export the whole log to a spreadsheet:
 
 ```bash
 applymap export --csv applications.csv
+applymap export --csv applications.json --format json   # for scripts
 ```
 
 5. AI features (optional, need an API key):

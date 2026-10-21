@@ -197,3 +197,27 @@ def test_rank_tiebreak_keeps_report_schema_unchanged():
     # The tie-break must not add new keys to the report dicts.
     ranked = matcher.rank_postings(["python"], [("a", "python"), ("b", "python python")])
     assert set(ranked[0]) == {"score", "matched", "missing", "required", "label"}
+
+
+def test_extract_finds_devops_stack_tokens():
+    posting = (
+        "DevOps engineer: microservices on Kubernetes, websockets APIs, "
+        "serverless on AWS. Maven or Gradle builds; Helm charts; "
+        "PowerShell and Unix scripting."
+    )
+    found = matcher.extract_required_skills(posting)
+    for skill in (
+        "devops", "microservices", "websockets", "serverless",
+        "maven", "gradle", "helm", "powershell", "unix",
+    ):
+        assert skill in found
+
+
+def test_extract_resolves_restful_and_singular_forms():
+    found = matcher.extract_required_skills(
+        "RESTful APIs and a microservice architecture."
+    )
+    assert "rest" in found
+    assert "restful" not in found
+    assert "microservices" in found
+    assert "microservice" not in found

@@ -27,6 +27,9 @@ SKILL_TOKENS = {
     "kafka", "rabbitmq", "elasticsearch", "opensearch",
     "s3", "ec2", "lambda", "dynamodb",
     "firebase", "supabase", "vite", "express", "nestjs",
+    # Frequently-requested in infra/devops postings but previously missed.
+    "microservices", "websockets", "devops", "serverless", "unix",
+    "powershell", "gradle", "maven", "helm",
 }
 
 
@@ -55,6 +58,10 @@ SKILL_ALIASES = {
     "nodejs": "node",
     "reactjs": "react",
     "vuejs": "vue",
+    # Alternate spellings common in real postings.
+    "restful": "rest",
+    "websocket": "websockets",
+    "microservice": "microservices",
 }
 
 

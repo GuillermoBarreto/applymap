@@ -102,12 +102,29 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+def _unique_labels(postings: list) -> list:
+    """(label, text) pairs with a unique label for every posting.
+
+    cmd_rank labels postings by filename stem, so backend.txt in two
+    different folders prints as two identical rows. Suffix later copies
+    with (2), (3), ... so every ranking row maps back to its file.
+    """
+    seen: dict = {}
+    labeled = []
+    for path, text in postings:
+        stem = Path(path).stem
+        seen[stem] = seen.get(stem, 0) + 1
+        label = stem if seen[stem] == 1 else f"{stem} ({seen[stem]})"
+        labeled.append((label, text))
+    return labeled
+
+
 def cmd_rank(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
     postings = []
     for path in args.postings:
-        postings.append((Path(path).stem, _read_posting(path)))
-    ranked = matcher.rank_postings(prof["skills"], postings)
+        postings.append((path, _read_posting(path)))
+    ranked = matcher.rank_postings(prof["skills"], _unique_labels(postings))
     hidden = [r for r in ranked if r["score"] < args.min_score]
     ranked = [r for r in ranked if r["score"] >= args.min_score]
     if args.json:
@@ -264,30 +281,33 @@ def cmd_applications(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    """Write tracked applications to a CSV file for spreadsheets."""
+    """Write tracked applications to a CSV or JSON file for spreadsheets/scripts."""
     entries = _load_applications()
     # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
     # literal "~" directory; create missing parent folders too.
     out = Path(args.csv).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow([
-            "date", "company", "role", "status", "score",
-            "matched_skills", "missing_skills", "posting",
-        ])
-        for e in entries:
+    if args.format == "json":
+        out.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+    else:
+        with open(out, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
             writer.writerow([
-                e.get("date", ""),
-                e.get("company", ""),
-                e.get("role", ""),
-                e.get("status", ""),
-                e.get("score", ""),
-                "; ".join(e.get("matched_skills", [])),
-                "; ".join(e.get("missing_skills", [])),
-                e.get("posting", ""),
+                "date", "company", "role", "status", "score",
+                "matched_skills", "missing_skills", "posting",
             ])
-    print(f"Wrote {len(entries)} application(s) to {args.csv}")
+            for e in entries:
+                writer.writerow([
+                    e.get("date", ""),
+                    e.get("company", ""),
+                    e.get("role", ""),
+                    e.get("status", ""),
+                    e.get("score", ""),
+                    "; ".join(e.get("matched_skills", [])),
+                    "; ".join(e.get("missing_skills", [])),
+                    e.get("posting", ""),
+                ])
+    print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
 
 
@@ -320,7 +340,28 @@ def cmd_stats(args: argparse.Namespace) -> int:
         role = best.get("role") or "(unknown role)"
         print(f"\nAverage fit score: {avg}/100")
         print(f"Best fit: {company} — {role} ({best.get('score')}/100)")
+    _print_funnel(counts)
     return 0
+
+
+def _print_funnel(counts: dict) -> None:
+    """Print applied -> interview -> offer conversion rates.
+
+    An offer implies an interview, so interviews include offers. Only
+    counts statuses that represent real pipeline movement; "interested"
+    entries are wishlists, not applications, and are excluded.
+    """
+    applied = counts.get("applied", 0)
+    interviews = counts.get("interview", 0) + counts.get("offer", 0)
+    offers = counts.get("offer", 0)
+    pipeline = applied + counts.get("interview", 0) + offers + counts.get("rejected", 0)
+    if not pipeline:
+        return
+    print("\nConversion funnel (applied -> interview -> offer):")
+    print(f"  {applied} applied, {interviews} reached interview, {offers} offers")
+    print(f"  interview rate: {round(100 * interviews / pipeline)}% of {pipeline}")
+    if interviews:
+        print(f"  offer rate: {round(100 * offers / interviews)}% of interviews")
 
 
 def _find_application_indexes(entries: list, company: str, role: str) -> list:
@@ -352,6 +393,36 @@ def cmd_update_status(args: argparse.Namespace) -> int:
     entries[matches[0]]["status"] = args.status
     TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
     print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
+    return 0
+
+
+def cmd_followup(args: argparse.Namespace) -> int:
+    """List applications still waiting for a response after --days days."""
+    entries = _load_applications()
+    today = datetime.date.today()
+    stale = []
+    for e in entries:
+        if e.get("status") != "applied":
+            continue
+        try:
+            logged = datetime.date.fromisoformat(e.get("date") or "")
+        except (ValueError, TypeError):
+            # A hand-edited record with a bad date is still tracked — skip
+            # it here rather than crashing the whole report.
+            continue
+        waiting = (today - logged).days
+        if waiting >= args.days:
+            stale.append((waiting, e))
+    if not stale:
+        print(f"No applications waiting {args.days}+ days. All caught up.")
+        return 0
+    stale.sort(key=lambda pair: pair[0], reverse=True)  # longest waiting first
+    print(f"{len(stale)} application(s) waiting {args.days}+ days — "
+          f"time to follow up:\n")
+    for waiting, e in stale:
+        company = e.get("company") or "(unknown company)"
+        role = e.get("role") or "(unknown role)"
+        print(f"  {waiting}d  {company} — {role} (logged {e.get('date')})")
     return 0
 
 
@@ -505,10 +576,17 @@ def build_parser() -> argparse.ArgumentParser:
     pst = sub.add_parser("stats", help="Summarize tracked applications.")
     pst.set_defaults(func=cmd_stats)
 
-    pe = sub.add_parser("export", help="Export tracked applications to CSV.")
+    pe = sub.add_parser("export", help="Export tracked applications to CSV or JSON.")
     pe.add_argument("--csv", required=True, metavar="PATH",
-                    help="CSV file to write (creates parent folders).")
+                    help="File to write (creates parent folders).")
+    pe.add_argument("--format", default="csv", choices=["csv", "json"],
+                    help="Export format (default: csv).")
     pe.set_defaults(func=cmd_export)
+
+    pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
+    pf.add_argument("--days", type=int, default=30, metavar="N",
+                    help="Flag applications in 'applied' status for at least N days (default: 30).")
+    pf.set_defaults(func=cmd_followup)
 
     return p
 
