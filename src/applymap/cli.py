@@ -347,8 +347,7 @@ def _print_funnel(counts: dict) -> None:
         print(f"  offer rate: {round(100 * offers / interviews)}% of interviews")
 
 
-def _find_application_indexes(entries: list, company: str, role: str) -> list:
-    """Indexes of entries matching the company/role, normalized like _already_tracked."""
+def _find_application_indexes(entries: list, company: str, role: str) -> list:    """Indexes of entries matching the company/role, normalized like _already_tracked."""
     company, role = _norm_identity(company), _norm_identity(role)
     return [
         i for i, entry in enumerate(entries)
@@ -376,6 +375,36 @@ def cmd_update_status(args: argparse.Namespace) -> int:
     entries[matches[0]]["status"] = args.status
     TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
     print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
+    return 0
+
+
+def cmd_followup(args: argparse.Namespace) -> int:
+    """List applications still waiting for a response after --days days."""
+    entries = _load_applications()
+    today = datetime.date.today()
+    stale = []
+    for e in entries:
+        if e.get("status") != "applied":
+            continue
+        try:
+            logged = datetime.date.fromisoformat(e.get("date") or "")
+        except (ValueError, TypeError):
+            # A hand-edited record with a bad date is still tracked — skip
+            # it here rather than crashing the whole report.
+            continue
+        waiting = (today - logged).days
+        if waiting >= args.days:
+            stale.append((waiting, e))
+    if not stale:
+        print(f"No applications waiting {args.days}+ days. All caught up.")
+        return 0
+    stale.sort(key=lambda pair: pair[0], reverse=True)  # longest waiting first
+    print(f"{len(stale)} application(s) waiting {args.days}+ days — "
+          f"time to follow up:\n")
+    for waiting, e in stale:
+        company = e.get("company") or "(unknown company)"
+        role = e.get("role") or "(unknown role)"
+        print(f"  {waiting}d  {company} — {role} (logged {e.get('date')})")
     return 0
 
 
@@ -535,6 +564,11 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--format", default="csv", choices=["csv", "json"],
                     help="Export format (default: csv).")
     pe.set_defaults(func=cmd_export)
+
+    pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
+    pf.add_argument("--days", type=int, default=30, metavar="N",
+                    help="Flag applications in 'applied' status for at least N days (default: 30).")
+    pf.set_defaults(func=cmd_followup)
 
     return p
 
