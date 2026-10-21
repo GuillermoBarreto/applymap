@@ -320,7 +320,28 @@ def cmd_stats(args: argparse.Namespace) -> int:
         role = best.get("role") or "(unknown role)"
         print(f"\nAverage fit score: {avg}/100")
         print(f"Best fit: {company} — {role} ({best.get('score')}/100)")
+    _print_funnel(counts)
     return 0
+
+
+def _print_funnel(counts: dict) -> None:
+    """Print applied -> interview -> offer conversion rates.
+
+    An offer implies an interview, so interviews include offers. Only
+    counts statuses that represent real pipeline movement; "interested"
+    entries are wishlists, not applications, and are excluded.
+    """
+    applied = counts.get("applied", 0)
+    interviews = counts.get("interview", 0) + counts.get("offer", 0)
+    offers = counts.get("offer", 0)
+    pipeline = applied + counts.get("interview", 0) + offers + counts.get("rejected", 0)
+    if not pipeline:
+        return
+    print("\nConversion funnel (applied -> interview -> offer):")
+    print(f"  {applied} applied, {interviews} reached interview, {offers} offers")
+    print(f"  interview rate: {round(100 * interviews / pipeline)}% of {pipeline}")
+    if interviews:
+        print(f"  offer rate: {round(100 * offers / interviews)}% of interviews")
 
 
 def _find_application_indexes(entries: list, company: str, role: str) -> list:
