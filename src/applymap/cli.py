@@ -102,12 +102,29 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+def _unique_labels(postings: list) -> list:
+    """(label, text) pairs with a unique label for every posting.
+
+    cmd_rank labels postings by filename stem, so backend.txt in two
+    different folders prints as two identical rows. Suffix later copies
+    with (2), (3), ... so every ranking row maps back to its file.
+    """
+    seen: dict = {}
+    labeled = []
+    for path, text in postings:
+        stem = Path(path).stem
+        seen[stem] = seen.get(stem, 0) + 1
+        label = stem if seen[stem] == 1 else f"{stem} ({seen[stem]})"
+        labeled.append((label, text))
+    return labeled
+
+
 def cmd_rank(args: argparse.Namespace) -> int:
     prof = profile_mod.load_profile(args.profile)
     postings = []
     for path in args.postings:
-        postings.append((Path(path).stem, _read_posting(path)))
-    ranked = matcher.rank_postings(prof["skills"], postings)
+        postings.append((path, _read_posting(path)))
+    ranked = matcher.rank_postings(prof["skills"], _unique_labels(postings))
     hidden = [r for r in ranked if r["score"] < args.min_score]
     ranked = [r for r in ranked if r["score"] >= args.min_score]
     if args.json:
