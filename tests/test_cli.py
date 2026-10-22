@@ -1031,3 +1031,36 @@ def test_update_status_ambiguity_lists_posting_files(tmp_path, monkeypatch, caps
     assert "posting-a.txt" in out
     assert "posting-b.txt" in out
     assert "--posting" in out
+
+
+def test_track_failed_write_leaves_no_partial_log(tmp_path, monkeypatch):
+    """A crash during the save leaves no half-written log and no temp file."""
+    import os
+    import pytest
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        main(["track", str(posting_path), "--profile", str(profile_path),
+              "--company", "Acme", "--role", "Backend Dev"])
+    assert not (tmp_path / "applications.json").exists()
+    assert list(tmp_path.glob(".applications-*.tmp")) == []
+
+
+def test_update_status_save_survives_roundtrip(tmp_path, monkeypatch):
+    """Atomic save writes valid JSON that _load_applications reads back."""
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    cli_mod._save_applications([{"company": "Acme"}])
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert entries == [{"company": "Acme"}]
+    assert list(tmp_path.glob(".applications-*.tmp")) == []

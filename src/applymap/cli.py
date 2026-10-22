@@ -8,6 +8,7 @@ import datetime
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from . import __version__, matcher, profile as profile_mod
@@ -172,6 +173,31 @@ TRACKING_PATH = (
 )
 
 
+def _save_applications(entries: list) -> None:
+    """Persist the tracked log atomically: temp file + os.replace.
+
+    A plain write_text can leave applications.json half-written (and the
+    whole log unreadable) if the process is killed mid-write. Writing to
+    a temp file in the same directory first makes the swap one
+    filesystem operation. A failed write removes the temp file instead
+    of leaving a corrupt log behind.
+    """
+    TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=TRACKING_PATH.parent, prefix=".applications-", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(entries, fh, indent=2)
+        os.replace(tmp_name, TRACKING_PATH)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
 def cmd_track(args: argparse.Namespace) -> int:
     """Log an application: date, company, role, and this profile's fit score."""
     prof = profile_mod.load_profile(args.profile)
@@ -200,7 +226,7 @@ def cmd_track(args: argparse.Namespace) -> int:
     if _already_tracked(entries, posting_path, args.company or "", args.role or ""):
         return 0
     entries.append(record)
-    TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    _save_applications(entries)
     print(f"Logged application ({record['date']}, score {record['score']}/100) "
           f"to {TRACKING_PATH}")
     return 0
@@ -423,7 +449,7 @@ def cmd_update_status(args: argparse.Namespace) -> int:
         print("Re-run with --posting <posting file> to pick one.")
         return 1
     entries[matches[0]]["status"] = args.status
-    TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    _save_applications(entries)
     print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
     return 0
 
