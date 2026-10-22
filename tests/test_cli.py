@@ -1087,3 +1087,44 @@ def test_read_posting_normal_file_untouched(tmp_path, capsys):
     small.write_text("python backend role", encoding="utf-8")
     assert cli_mod._read_posting(str(small)) == "python backend role"
     assert capsys.readouterr().out == ""
+
+
+def test_track_backdates_application(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev",
+               "--date", "2026-10-01"])
+    assert rc == 0
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert entries[0]["date"] == "2026-10-01"
+
+
+def test_track_invalid_date_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev",
+               "--date", "2026-13-99"])
+    assert rc == 1
+    assert "not a valid date" in capsys.readouterr().err
+
+
+def test_track_future_date_is_rejected(tmp_path, monkeypatch, capsys):
+    import datetime
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    future = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev",
+               "--date", future])
+    assert rc == 1
+    assert "in the future" in capsys.readouterr().err
+    assert not (tmp_path / "applications.json").exists()

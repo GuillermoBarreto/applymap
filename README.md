@@ -76,7 +76,9 @@ applymap track posting-a.txt --company "Acme" --role "Backend Engineer"
 `~/.applymap/applications.json` — one JSON list you can open in any editor.
 Set `APPLYMAP_DATA_DIR` to move it elsewhere. When a posting contains no
 recognizable tech skills, `track` warns you instead of silently logging a
-meaningless 0/100.
+meaningless 0/100. Backfilling applications you sent before you started
+tracking? Pass `--date 2026-10-01` to log one under its real date (the
+`followup` and `stats` date math depends on it).
 
 List what you've applied to (newest first), optionally filtered by status:
 

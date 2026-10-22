@@ -216,6 +216,30 @@ def _save_applications(entries: list) -> None:
         raise
 
 
+def _track_date(value: str | None) -> str:
+    """The date to stamp on a tracked application.
+
+    Defaults to today; accepts an explicit YYYY-MM-DD for backfilling
+    applications sent before tracking started (followup and stats date
+    math depend on real dates). Malformed and future dates are rejected
+    with a friendly error instead of logging nonsense.
+    """
+    if not value:
+        return datetime.date.today().isoformat()
+    try:
+        parsed = datetime.date.fromisoformat(value)
+    except ValueError:
+        raise RuntimeError(
+            f"--date {value!r} is not a valid date; use YYYY-MM-DD."
+        )
+    if parsed > datetime.date.today():
+        raise RuntimeError(
+            f"--date {value!r} is in the future; log the application on the "
+            "day you actually applied."
+        )
+    return parsed.isoformat()
+
+
 def cmd_track(args: argparse.Namespace) -> int:
     """Log an application: date, company, role, and this profile's fit score."""
     prof = profile_mod.load_profile(args.profile)
@@ -230,7 +254,7 @@ def cmd_track(args: argparse.Namespace) -> int:
         print("(No recognizable tech skills found in the posting — "
               "the 0/100 score means nothing was matched.)")
     record = {
-        "date": datetime.date.today().isoformat(),
+        "date": _track_date(args.date),
         "company": args.company or "",
         "role": args.role or "",
         "posting": posting_path,
@@ -631,6 +655,9 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--status", default="applied",
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Application status.")
+    pt.add_argument("--date", default=None, metavar="YYYY-MM-DD",
+                    help="Log the application under this date (default: today); "
+                         "use when backfilling applications you sent earlier.")
     pt.set_defaults(func=cmd_track)
 
     pu = sub.add_parser("update-status", help="Change a tracked application's status.")
