@@ -92,6 +92,12 @@ Move an application through the pipeline as it progresses:
 applymap update-status --company "Acme" --role "Backend Engineer" --status interview
 ```
 
+Re-applied to the same company and role under a new requisition? Two
+tracked applications can legitimately share a company and role — add
+`--posting posting-b.txt` to target the one tracked from that file. The
+ambiguity message lists each candidate's posting file so you know which
+one to pick.
+
 Get a quick summary of your pipeline — total tracked, counts by status,
 average fit score, the best-fit application, and the applied → interview →
 offer conversion funnel:

@@ -961,3 +961,73 @@ def test_rank_disambiguates_identical_stems(tmp_path, monkeypatch, capsys):
     labels = [l.split("  ")[-1].strip() if False else l for l in lines]
     assert any("backend" in l and "(2)" not in l for l in lines)
     assert any("backend (2)" in l for l in lines)
+
+
+def _seed_duplicate_company_role_log(tmp_path, monkeypatch):
+    """Two Acme/Backend Dev entries tracked from different posting files."""
+    import json
+    from applymap import cli as cli_mod
+
+    posting_a = tmp_path / "posting-a.txt"
+    posting_a.write_text("Python backend role.", encoding="utf-8")
+    posting_b = tmp_path / "posting-b.txt"
+    posting_b.write_text("Python backend role, new requisition.", encoding="utf-8")
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "posting": str(posting_a), "score": 67, "status": "applied"},
+                {"date": "2026-10-15", "company": "Acme", "role": "Backend Dev",
+                 "posting": str(posting_b), "score": 55, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    return log, posting_a, posting_b
+
+
+def test_update_status_posting_disambiguates_duplicates(tmp_path, monkeypatch):
+    import json
+
+    log, _, posting_b = _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview", "--posting", str(posting_b)])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert entries[0]["status"] == "applied"      # untouched
+    assert entries[1]["status"] == "interview"   # the posting-b one
+
+
+def test_update_status_posting_accepts_bare_filename(tmp_path, monkeypatch):
+    import json
+
+    log, _, _ = _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "offer", "--posting", "posting-a.txt"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert entries[0]["status"] == "offer"
+    assert entries[1]["status"] == "applied"
+
+
+def test_update_status_posting_no_match_is_friendly_error(tmp_path, monkeypatch, capsys):
+    _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview", "--posting", "posting-c.txt"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "No tracked application" in out
+    assert "posting-c.txt" in out
+
+
+def test_update_status_ambiguity_lists_posting_files(tmp_path, monkeypatch, capsys):
+    _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "posting-a.txt" in out
+    assert "posting-b.txt" in out
+    assert "--posting" in out

@@ -364,31 +364,63 @@ def _print_funnel(counts: dict) -> None:
         print(f"  offer rate: {round(100 * offers / interviews)}% of interviews")
 
 
-def _find_application_indexes(entries: list, company: str, role: str) -> list:
-    """Indexes of entries matching the company/role, normalized like _already_tracked."""
+def _resolve_posting_selector(value: str) -> str:
+    """Resolve an --posting selector to something comparable against records.
+
+    A path to an existing file becomes its absolute path (matching what
+    `track` stores); anything else becomes a bare filename, so the user
+    can type just ``posting-b.txt``.
+    """
+    resolved = Path(value).expanduser()
+    if resolved.exists():
+        return str(resolved.resolve())
+    return Path(value).name
+
+
+def _find_application_indexes(
+    entries: list, company: str, role: str, posting: str | None = None
+) -> list:
+    """Indexes of entries matching the company/role, normalized like _already_tracked.
+
+    When ``posting`` is given, only entries tracked from that posting file
+    count — the escape hatch when company+role alone matches several
+    applications (re-applied under a new requisition, see issue #18).
+    """
     company, role = _norm_identity(company), _norm_identity(role)
-    return [
-        i for i, entry in enumerate(entries)
-        if _norm_identity(entry.get("company")) == company
-        and _norm_identity(entry.get("role")) == role
-    ]
+    selector = _resolve_posting_selector(posting) if posting else None
+    matched = []
+    for i, entry in enumerate(entries):
+        if (_norm_identity(entry.get("company")) != company
+                or _norm_identity(entry.get("role")) != role):
+            continue
+        if selector is not None:
+            stored = entry.get("posting") or ""
+            if not (stored == selector or Path(stored).name == selector):
+                continue
+        matched.append(i)
+    return matched
 
 
 def cmd_update_status(args: argparse.Namespace) -> int:
     """Change the status of a tracked application, e.g. applied -> interview."""
     entries = _load_applications()
-    matches = _find_application_indexes(entries, args.company, args.role)
+    matches = _find_application_indexes(
+        entries, args.company, args.role, args.posting
+    )
     if not matches:
-        print(f"No tracked application for '{args.company}' — '{args.role}'. "
-              f"Log it first with `applymap track`.")
+        hint = (
+            f" from '{args.posting}'" if args.posting else ""
+        )
+        print(f"No tracked application for '{args.company}' — '{args.role}'"
+              f"{hint}. Log it first with `applymap track`.")
         return 1
     if len(matches) > 1:
         print(f"Multiple applications match '{args.company}' — '{args.role}':")
         for i in matches:
             e = entries[i]
             print(f"  {e.get('date', '?')}  {e.get('score', '?')}/100  "
-                  f"[{e.get('status', '?')}]")
-        print("Re-run with a more specific company/role.")
+                  f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
+        print("Re-run with --posting <posting file> to pick one.")
         return 1
     entries[matches[0]]["status"] = args.status
     TRACKING_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
@@ -563,6 +595,9 @@ def build_parser() -> argparse.ArgumentParser:
     pu.add_argument("--status", required=True,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="New status.")
+    pu.add_argument("--posting", default=None, metavar="FILE",
+                    help="Only match the application tracked from this posting file; "
+                         "use when company+role alone matches more than one.")
     pu.set_defaults(func=cmd_update_status)
 
     ps = sub.add_parser("applications", help="List tracked applications.")
