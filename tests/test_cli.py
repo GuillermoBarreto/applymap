@@ -1064,3 +1064,26 @@ def test_update_status_save_survives_roundtrip(tmp_path, monkeypatch):
     entries = json.loads(log.read_text(encoding="utf-8"))
     assert entries == [{"company": "Acme"}]
     assert list(tmp_path.glob(".applications-*.tmp")) == []
+
+
+def test_read_posting_truncates_huge_file_with_warning(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "MAX_POSTING_CHARS", 50)
+    big = tmp_path / "huge.txt"
+    big.write_text("python " * 40, encoding="utf-8")
+    text = cli_mod._read_posting(str(big))
+    assert len(text) == 50
+    assert text.startswith("python")
+    out = capsys.readouterr().out
+    assert "Warning" in out
+    assert "probably not a job posting" in out
+
+
+def test_read_posting_normal_file_untouched(tmp_path, capsys):
+    from applymap import cli as cli_mod
+
+    small = tmp_path / "small.txt"
+    small.write_text("python backend role", encoding="utf-8")
+    assert cli_mod._read_posting(str(small)) == "python backend role"
+    assert capsys.readouterr().out == ""

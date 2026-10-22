@@ -15,11 +15,23 @@ from . import __version__, matcher, profile as profile_mod
 from .llm import draft_cover_letter, is_configured, summarize_gaps
 
 
+# Posting files are plain text: cap what _read_posting loads so a huge
+# file passed by mistake doesn't eat all memory. Tests shrink this.
+MAX_POSTING_CHARS = 1_000_000
+
+
 def _read_posting(path: str) -> str:
-    """Read a posting file, with a friendly error when it is missing."""
+    """Read a posting file, with a friendly error when it is missing.
+
+    Posting files are plain text, so anything above ~1MB is almost
+    certainly a mistake (e.g. a log file passed instead of a posting).
+    Overlong files are truncated with a warning rather than read fully
+    into memory, so analyze/rank/track still work on the text that
+    matters.
+    """
     resolved = Path(path).expanduser()
     try:
-        return resolved.read_text(encoding="utf-8")
+        text = resolved.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise FileNotFoundError(
             f"Posting file not found: {resolved}. Check the path and try again."
@@ -29,6 +41,12 @@ def _read_posting(path: str) -> str:
             f"Posting file {resolved} is not valid UTF-8 text. "
             "Save it as plain UTF-8 text and try again."
         )
+    if len(text) > MAX_POSTING_CHARS:
+        print(f"Warning: {resolved} is {len(text):,} characters; using only "
+              f"the first {MAX_POSTING_CHARS:,} — this is probably not a "
+              "job posting.")
+        text = text[:MAX_POSTING_CHARS]
+    return text
 
 
 def cmd_init_profile(args: argparse.Namespace) -> int:
