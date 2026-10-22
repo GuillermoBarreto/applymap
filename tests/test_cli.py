@@ -961,3 +961,170 @@ def test_rank_disambiguates_identical_stems(tmp_path, monkeypatch, capsys):
     labels = [l.split("  ")[-1].strip() if False else l for l in lines]
     assert any("backend" in l and "(2)" not in l for l in lines)
     assert any("backend (2)" in l for l in lines)
+
+
+def _seed_duplicate_company_role_log(tmp_path, monkeypatch):
+    """Two Acme/Backend Dev entries tracked from different posting files."""
+    import json
+    from applymap import cli as cli_mod
+
+    posting_a = tmp_path / "posting-a.txt"
+    posting_a.write_text("Python backend role.", encoding="utf-8")
+    posting_b = tmp_path / "posting-b.txt"
+    posting_b.write_text("Python backend role, new requisition.", encoding="utf-8")
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "posting": str(posting_a), "score": 67, "status": "applied"},
+                {"date": "2026-10-15", "company": "Acme", "role": "Backend Dev",
+                 "posting": str(posting_b), "score": 55, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    return log, posting_a, posting_b
+
+
+def test_update_status_posting_disambiguates_duplicates(tmp_path, monkeypatch):
+    import json
+
+    log, _, posting_b = _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview", "--posting", str(posting_b)])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert entries[0]["status"] == "applied"      # untouched
+    assert entries[1]["status"] == "interview"   # the posting-b one
+
+
+def test_update_status_posting_accepts_bare_filename(tmp_path, monkeypatch):
+    import json
+
+    log, _, _ = _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "offer", "--posting", "posting-a.txt"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert entries[0]["status"] == "offer"
+    assert entries[1]["status"] == "applied"
+
+
+def test_update_status_posting_no_match_is_friendly_error(tmp_path, monkeypatch, capsys):
+    _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview", "--posting", "posting-c.txt"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "No tracked application" in out
+    assert "posting-c.txt" in out
+
+
+def test_update_status_ambiguity_lists_posting_files(tmp_path, monkeypatch, capsys):
+    _seed_duplicate_company_role_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "posting-a.txt" in out
+    assert "posting-b.txt" in out
+    assert "--posting" in out
+
+
+def test_track_failed_write_leaves_no_partial_log(tmp_path, monkeypatch):
+    """A crash during the save leaves no half-written log and no temp file."""
+    import os
+    import pytest
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        main(["track", str(posting_path), "--profile", str(profile_path),
+              "--company", "Acme", "--role", "Backend Dev"])
+    assert not (tmp_path / "applications.json").exists()
+    assert list(tmp_path.glob(".applications-*.tmp")) == []
+
+
+def test_update_status_save_survives_roundtrip(tmp_path, monkeypatch):
+    """Atomic save writes valid JSON that _load_applications reads back."""
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    cli_mod._save_applications([{"company": "Acme"}])
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert entries == [{"company": "Acme"}]
+    assert list(tmp_path.glob(".applications-*.tmp")) == []
+
+
+def test_read_posting_truncates_huge_file_with_warning(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "MAX_POSTING_CHARS", 50)
+    big = tmp_path / "huge.txt"
+    big.write_text("python " * 40, encoding="utf-8")
+    text = cli_mod._read_posting(str(big))
+    assert len(text) == 50
+    assert text.startswith("python")
+    out = capsys.readouterr().out
+    assert "Warning" in out
+    assert "probably not a job posting" in out
+
+
+def test_read_posting_normal_file_untouched(tmp_path, capsys):
+    from applymap import cli as cli_mod
+
+    small = tmp_path / "small.txt"
+    small.write_text("python backend role", encoding="utf-8")
+    assert cli_mod._read_posting(str(small)) == "python backend role"
+    assert capsys.readouterr().out == ""
+
+
+def test_track_backdates_application(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev",
+               "--date", "2026-10-01"])
+    assert rc == 0
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert entries[0]["date"] == "2026-10-01"
+
+
+def test_track_invalid_date_is_friendly_error(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev",
+               "--date", "2026-13-99"])
+    assert rc == 1
+    assert "not a valid date" in capsys.readouterr().err
+
+
+def test_track_future_date_is_rejected(tmp_path, monkeypatch, capsys):
+    import datetime
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    future = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev",
+               "--date", future])
+    assert rc == 1
+    assert "in the future" in capsys.readouterr().err
+    assert not (tmp_path / "applications.json").exists()
