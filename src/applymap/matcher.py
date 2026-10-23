@@ -76,6 +76,29 @@ def tokenize(text: str) -> Set[str]:
     return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
 
 
+# Characters the tokenizer keeps inside a token (see tokenize). A
+# multi-word skill phrase must not touch one of these on either side —
+# otherwise "spring bootcamp" would report "spring boot" (issue #13).
+_TOKEN_CHAR = r"[a-z0-9+#./-]"
+
+
+def _phrase_pattern(phrase: str) -> "re.Pattern":
+    """Regex matching phrase as a standalone phrase, not a substring."""
+    return re.compile(
+        rf"(?<!{_TOKEN_CHAR}){re.escape(phrase)}(?!{_TOKEN_CHAR})"
+    )
+
+
+def _phrase_in_text(phrase: str, lowered: str) -> bool:
+    """True when the phrase appears in lowered text as a standalone phrase."""
+    return _phrase_pattern(phrase).search(lowered) is not None
+
+
+def _phrase_occurrences(phrase: str, lowered: str) -> int:
+    """Boundary-aware occurrence count of a standalone phrase."""
+    return len(_phrase_pattern(phrase).findall(lowered))
+
+
 def extract_required_skills(posting: str) -> List[str]:
     """Find recognizable skill tokens inside a job posting.
 
@@ -93,7 +116,7 @@ def extract_required_skills(posting: str) -> List[str]:
     # their canonical form below.
     for skill in sorted(SKILL_TOKENS | set(SKILL_ALIASES)):
         if " " in skill or "/" in skill or "." in skill:
-            if skill in lowered:
+            if _phrase_in_text(skill, lowered):
                 found.append(skill)
         elif skill in tokens:
             found.append(skill)
@@ -128,7 +151,7 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
         total = 0
         for form in forms.get(canon, [canon]):
             if " " in form or "/" in form or "." in form:
-                total += lowered.count(form)
+                total += _phrase_occurrences(form, lowered)
             else:
                 total += sum(1 for t in tokens if t == form)
         mentions[skill] = total
