@@ -1128,3 +1128,93 @@ def test_track_future_date_is_rejected(tmp_path, monkeypatch, capsys):
     assert rc == 1
     assert "in the future" in capsys.readouterr().err
     assert not (tmp_path / "applications.json").exists()
+
+
+def test_track_duplicate_recognizes_old_relative_posting(tmp_path, monkeypatch, capsys):
+    """Issue #20: an entry logged before absolute-path storage kept a
+    relative posting string; re-tracking the same file must warn instead
+    of logging a duplicate."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    monkeypatch.chdir(tmp_path)
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    (tmp_path / "applications.json").write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme",
+                 "role": "Backend Dev", "posting": "posting.txt",
+                 "score": 67, "status": "applied"}
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["track", "posting.txt", "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev"])
+    assert rc == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+
+
+def test_track_duplicate_matches_posting_by_bare_filename(tmp_path, monkeypatch, capsys):
+    """An entry logged from another machine keeps an absolute path that
+    can never resolve here; the bare filename still identifies the file."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    monkeypatch.chdir(tmp_path)
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    (tmp_path / "applications.json").write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme",
+                 "role": "Backend Dev", "posting": "/old/machine/posting.txt",
+                 "score": 67, "status": "applied"}
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["track", "posting.txt", "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev"])
+    assert rc == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+
+
+def test_analyze_json_ai_includes_gap_analysis(tmp_path, capsys, monkeypatch):
+    """Issue #12: --json --ai puts the gap analysis in the JSON report
+    instead of silently dropping it."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        cli_mod, "summarize_gaps",
+        lambda prof, missing: f"Study: {', '.join(missing)}.",
+    )
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path),
+               "--json", "--ai"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert "kubernetes" in report["missing"]
+    assert report["gap_analysis"] == "Study: kubernetes."
+
+
+def test_analyze_json_ai_without_key_warns_and_nulls(tmp_path, capsys, monkeypatch):
+    """Without a key, --json --ai yields gap_analysis: null plus a stderr
+    warning — never a silent skip."""
+    import json
+
+    monkeypatch.delenv("APPLYMAP_API_KEY", raising=False)
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path),
+               "--json", "--ai"])
+    assert rc == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out)["gap_analysis"] is None
+    assert "--ai had no effect" in out.err

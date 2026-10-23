@@ -221,3 +221,26 @@ def test_extract_resolves_restful_and_singular_forms():
     assert "restful" not in found
     assert "microservices" in found
     assert "microservice" not in found
+
+
+def test_multiword_skills_need_word_boundaries():
+    # "spring bootcamp" is not "spring boot" (issue #13); the plain
+    # "spring" token still matches as before.
+    found = matcher.extract_required_skills(
+        "Join our spring bootcamp program to learn Python."
+    )
+    assert "spring boot" not in found
+    assert "spring" in found
+    assert "python" in found
+
+
+def test_multiword_skill_still_matches_standalone():
+    found = matcher.extract_required_skills("We need Spring Boot and python.")
+    assert "spring boot" in found
+
+
+def test_skill_mentions_counts_standalone_phrases_only():
+    mentions = matcher.skill_mentions(
+        "spring bootcamp spring boot spring boot", ["spring boot"]
+    )
+    assert mentions["spring boot"] == 2

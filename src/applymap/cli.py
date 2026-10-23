@@ -92,6 +92,21 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
+        if args.ai:
+            # --ai used to be silently ignored alongside --json (issue #12):
+            # the gap analysis now rides along as a field, or null with a
+            # warning when it can't run.
+            if is_configured() and report["missing"]:
+                report["gap_analysis"] = summarize_gaps(prof, report["missing"])
+            else:
+                report["gap_analysis"] = None
+                reason = (
+                    "no missing skills to analyze"
+                    if not report["missing"]
+                    else "APPLYMAP_API_KEY is not set"
+                )
+                print(f"Warning: --ai had no effect ({reason}).",
+                      file=sys.stderr)
         print(json.dumps(report, indent=2))
         return 0
 
@@ -283,12 +298,30 @@ def _norm_identity(value: str) -> str:
     return (value or "").strip().casefold()
 
 
+def _posting_key(value: str) -> str:
+    """Normalize a posting path for duplicate detection (issue #20).
+
+    New entries store absolute paths, but entries logged before that
+    change (or hand-edited logs) keep whatever string was passed —
+    typically a relative "posting.txt". Resolving against the current
+    directory maps both spellings to the same file so the dedup check
+    still recognizes it.
+    """
+    return str(Path(value or "").expanduser().resolve())
+
+
 def _already_tracked(entries: list, posting_path: str, company: str, role: str) -> bool:
     """True when this exact application is already logged; warns the user."""
     company, role = _norm_identity(company), _norm_identity(role)
+    base = Path(posting_path).name
     for entry in entries:
-        if (entry.get("posting") == posting_path
-                and _norm_identity(entry.get("company")) == company
+        stored = entry.get("posting") or ""
+        # The bare-name fallback covers entries logged from a different
+        # directory, where no absolute spelling can ever match.
+        if (_posting_key(stored) != posting_path
+                and Path(stored).name != base):
+            continue
+        if (_norm_identity(entry.get("company")) == company
                 and _norm_identity(entry.get("role")) == role):
             print(
                 f"Already tracking {company or 'this posting'}"
