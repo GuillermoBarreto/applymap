@@ -92,6 +92,21 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
+        if args.ai:
+            # --ai used to be silently ignored alongside --json (issue #12):
+            # the gap analysis now rides along as a field, or null with a
+            # warning when it can't run.
+            if is_configured() and report["missing"]:
+                report["gap_analysis"] = summarize_gaps(prof, report["missing"])
+            else:
+                report["gap_analysis"] = None
+                reason = (
+                    "no missing skills to analyze"
+                    if not report["missing"]
+                    else "APPLYMAP_API_KEY is not set"
+                )
+                print(f"Warning: --ai had no effect ({reason}).",
+                      file=sys.stderr)
         print(json.dumps(report, indent=2))
         return 0
 
