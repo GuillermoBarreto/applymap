@@ -1183,3 +1183,38 @@ def test_track_duplicate_matches_posting_by_bare_filename(tmp_path, monkeypatch,
     assert "Already tracking" in capsys.readouterr().out
     entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
     assert len(entries) == 1
+
+
+def test_analyze_json_ai_includes_gap_analysis(tmp_path, capsys, monkeypatch):
+    """Issue #12: --json --ai puts the gap analysis in the JSON report
+    instead of silently dropping it."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        cli_mod, "summarize_gaps",
+        lambda prof, missing: f"Study: {', '.join(missing)}.",
+    )
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path),
+               "--json", "--ai"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert "kubernetes" in report["missing"]
+    assert report["gap_analysis"] == "Study: kubernetes."
+
+
+def test_analyze_json_ai_without_key_warns_and_nulls(tmp_path, capsys, monkeypatch):
+    """Without a key, --json --ai yields gap_analysis: null plus a stderr
+    warning — never a silent skip."""
+    import json
+
+    monkeypatch.delenv("APPLYMAP_API_KEY", raising=False)
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path),
+               "--json", "--ai"])
+    assert rc == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out)["gap_analysis"] is None
+    assert "--ai had no effect" in out.err
