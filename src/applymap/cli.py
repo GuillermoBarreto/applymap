@@ -555,6 +555,42 @@ def cmd_update_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_untrack(args: argparse.Namespace) -> int:
+    """Remove a tracked application from the log.
+
+    Matches entries exactly like update-status (see
+    _find_application_indexes), including the --posting escape hatch for
+    company+role duplicates. The log is rewritten atomically, like every
+    other write.
+    """
+    entries = _load_applications()
+    matches = _find_application_indexes(
+        entries, args.company, args.role, args.posting
+    )
+    if not matches:
+        hint = (
+            f" from '{args.posting}'" if args.posting else ""
+        )
+        print(f"No tracked application for '{args.company}' — '{args.role}'"
+              f"{hint}. Nothing to remove.")
+        return 1
+    if len(matches) > 1:
+        print(f"Multiple applications match '{args.company}' — '{args.role}':")
+        for i in matches:
+            e = entries[i]
+            print(f"  {e.get('date', '?')}  "
+                  f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
+        print("Re-run with --posting <posting file> to pick one.")
+        return 1
+    removed = entries.pop(matches[0])
+    _save_applications(entries)
+    company = removed.get("company") or "(unknown company)"
+    role = removed.get("role") or "(unknown role)"
+    print(f"Removed {company} — {role} "
+          f"(logged {removed.get('date', 'on an unknown date')}).")
+    return 0
+
+
 def cmd_followup(args: argparse.Namespace) -> int:
     """List applications still waiting for a response after --days days."""
     entries = _load_applications()
@@ -729,6 +765,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Only match the application tracked from this posting file; "
                          "use when company+role alone matches more than one.")
     pu.set_defaults(func=cmd_update_status)
+
+    prm = sub.add_parser("untrack", help="Remove a tracked application.")
+    prm.add_argument("--company", required=True, help="Company name (matches track --company).")
+    prm.add_argument("--role", required=True, help="Role title (matches track --role).")
+    prm.add_argument("--posting", default=None, metavar="FILE",
+                    help="Only remove the application tracked from this posting file; "
+                         "use when company+role alone matches more than one.")
+    prm.set_defaults(func=cmd_untrack)
 
     ps = sub.add_parser("applications", help="List tracked applications.")
     ps.add_argument("--status", default=None,

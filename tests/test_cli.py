@@ -1315,3 +1315,95 @@ def test_read_posting_directory_is_friendly_error(tmp_path, capsys):
     rc = main(["analyze", str(tmp_path), "--profile", str(profile_path)])
     assert rc == 1
     assert "Cannot read posting file" in capsys.readouterr().err
+
+
+def test_parser_has_untrack_subcommand():
+    parser = build_parser()
+    args = parser.parse_args(["untrack", "--company", "Acme", "--role", "Dev"])
+    assert args.func.__name__ == "cmd_untrack"
+
+
+def test_untrack_removes_matching_entry(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Dev",
+                 "score": 70, "status": "applied", "posting": "/a.txt"},
+                {"date": "2026-10-02", "company": "Beta", "role": "Dev",
+                 "score": 80, "status": "applied", "posting": "/b.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Acme", "--role", "Dev"])
+    assert rc == 0
+    assert "Removed Acme" in capsys.readouterr().out
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert [e["company"] for e in entries] == ["Beta"]
+
+
+def test_untrack_not_found_is_friendly_error(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(json.dumps([]), encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Nobody", "--role", "Nothing"])
+    assert rc == 1
+    assert "Nothing to remove" in capsys.readouterr().out
+
+
+def test_untrack_ambiguous_match_needs_posting(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Dev",
+                 "score": 70, "status": "applied", "posting": "/a.txt"},
+                {"date": "2026-10-05", "company": "Acme", "role": "Dev",
+                 "score": 75, "status": "applied", "posting": "/b.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Acme", "--role", "Dev"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Multiple applications match" in out
+    assert "--posting" in out
+    # Nothing was removed.
+    assert len(json.loads(log.read_text(encoding="utf-8"))) == 2
+
+
+def test_untrack_posting_disambiguates_duplicates(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Dev",
+                 "score": 70, "status": "applied", "posting": "/tmp/a.txt"},
+                {"date": "2026-10-05", "company": "Acme", "role": "Dev",
+                 "score": 75, "status": "applied", "posting": "/tmp/b.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Acme", "--role", "Dev",
+               "--posting", "b.txt"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert [e["posting"] for e in entries] == ["/tmp/a.txt"]
