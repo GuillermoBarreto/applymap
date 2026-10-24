@@ -1306,3 +1306,12 @@ def test_applications_shows_na_for_null_score(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "n/a" in out
     assert "None/100" not in out
+
+
+def test_read_posting_directory_is_friendly_error(tmp_path, capsys):
+    # Passing a directory as the posting used to dump an
+    # IsADirectoryError traceback.
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(tmp_path), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "Cannot read posting file" in capsys.readouterr().err

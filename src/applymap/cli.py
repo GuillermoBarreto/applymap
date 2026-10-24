@@ -41,6 +41,14 @@ def _read_posting(path: str) -> str:
             f"Posting file {resolved} is not valid UTF-8 text. "
             "Save it as plain UTF-8 text and try again."
         )
+    except OSError as exc:
+        # IsADirectoryError ("applymap analyze ~/postings/") or a
+        # PermissionError would otherwise dump a traceback; main()
+        # already turns RuntimeError into a friendly message.
+        raise RuntimeError(
+            f"Cannot read posting file {resolved}: "
+            f"{exc.strerror or exc}."
+        ) from exc
     if len(text) > MAX_POSTING_CHARS:
         print(f"Warning: {resolved} is {len(text):,} characters; using only "
               f"the first {MAX_POSTING_CHARS:,} — this is probably not a "
