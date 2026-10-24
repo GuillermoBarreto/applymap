@@ -699,7 +699,8 @@ def test_track_warns_when_no_skills_recognized(tmp_path, monkeypatch, capsys):
     # The application is still logged — the warning is informational only.
     entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
     assert len(entries) == 1
-    assert entries[0]["score"] == 0
+    # No recognizable skills means no meaningful score (issue #10).
+    assert entries[0]["score"] is None
 
 
 def test_track_no_warning_when_skills_found(tmp_path, monkeypatch, capsys):
@@ -1218,3 +1219,90 @@ def test_analyze_json_ai_without_key_warns_and_nulls(tmp_path, capsys, monkeypat
     out = capsys.readouterr()
     assert json.loads(out.out)["gap_analysis"] is None
     assert "--ai had no effect" in out.err
+
+
+def test_analyze_no_recognizable_skills_reports_not_meaningful(tmp_path, capsys):
+    # A posting with no recognizable skills must not print "Fit score:
+    # 0/100" — it would read as a true 0% fit (issue #10).
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "vague.txt"
+    posting_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Fit score:" not in out
+    assert "not meaningful" in out
+
+
+def test_analyze_json_null_score_when_no_requirements(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "vague.txt"
+    posting_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--json"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["score"] is None
+    assert report["no_requirements"] is True
+
+
+def test_rank_shows_na_for_skill_less_posting(tmp_path, capsys):
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    vague_path = tmp_path / "vague.txt"
+    vague_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["rank", str(posting_path), str(vague_path),
+               "--profile", str(profile_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "n/a" in out
+    assert "None/100" not in out
+
+
+def test_rank_min_score_keeps_skill_less_posting(tmp_path, capsys):
+    # A skill-less posting (score None) is not comparable to --min-score:
+    # it stays visible as n/a instead of being hidden or crashing the
+    # comparison (issue #10).
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    vague_path = tmp_path / "vague.txt"
+    vague_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["rank", str(vague_path), "--profile", str(profile_path),
+               "--min-score", "50"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "n/a" in out
+    assert "None/100" not in out
+
+
+def test_applications_shows_na_for_null_score(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "VagueCo", "role": "Person",
+                 "score": None, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["applications"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "n/a" in out
+    assert "None/100" not in out

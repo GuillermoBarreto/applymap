@@ -181,14 +181,20 @@ def match(profile_skills: List[str], required: List[str]) -> Dict[str, object]:
     Returns matched and missing skills plus a 0-100 fit score. Skill
     aliases (see SKILL_ALIASES) resolve on both sides, so a profile with
     "kubernetes" matches a posting asking for "k8s".
+
+    When the posting has no recognizable requirements, the score is None
+    (and no_requirements is True) instead of 0 — a bare 0/100 is
+    indistinguishable from a true 0% fit (issue #10).
     """
     have = {canonicalize(s) for s in profile_skills}
     req = list(dict.fromkeys(canonicalize(s) for s in required))  # de-duplicate, keep order
     matched = [s for s in req if s in have]
     missing = [s for s in req if s not in have]
-    score = round(100 * len(matched) / len(req)) if req else 0
+    no_requirements = not req
+    score = None if no_requirements else round(100 * len(matched) / len(req))
     return {
         "score": score,
+        "no_requirements": no_requirements,
         "matched": matched,
         "missing": missing,
         "required": req,
@@ -204,7 +210,9 @@ def rank_postings(
     of times the matched skills appear in the posting. A posting that says
     "Python" five times is more about Python than one that says it once,
     so it ranks first among equals. The report dicts themselves are
-    unchanged — only the order differs.
+    The report dicts themselves are unchanged — only the order differs.
+    Postings with no recognizable skills (score None) sort last, below
+    even a true 0/100 (issue #10).
     """
     scored = []
     for label, text in postings:
@@ -213,5 +221,12 @@ def rank_postings(
         mentions = skill_mentions(text, report["required"])
         depth = sum(mentions.get(s, 0) for s in report["matched"])
         scored.append((report, depth))
-    scored.sort(key=lambda pair: (pair[0]["score"], pair[1]), reverse=True)
+    scored.sort(
+        key=lambda pair: (
+            pair[0]["score"] is not None,
+            pair[0]["score"] if pair[0]["score"] is not None else -1,
+            pair[1],
+        ),
+        reverse=True,
+    )
     return [report for report, _ in scored]

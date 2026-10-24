@@ -110,6 +110,14 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2))
         return 0
 
+    if report["score"] is None:
+        # No recognizable skills (issue #10): printing "Fit score: 0/100"
+        # here would be indistinguishable from a posting that matched
+        # nothing.
+        print("(No recognizable tech skills found in the posting — "
+              "the fit score is not meaningful.)")
+        return 0
+
     print(f"Fit score: {report['score']}/100\n")
     if report["matched"]:
         print("Matched skills:")
@@ -119,9 +127,6 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print("\nMissing skills:")
         for s in report["missing"]:
             print(f"  - {s} (mentioned {report['mentions'][s]}x)")
-    if not report["required"]:
-        print("(No recognizable tech skills found in the posting.)")
-        return 0
 
     if args.ai:
         if not is_configured():
@@ -159,14 +164,20 @@ def cmd_rank(args: argparse.Namespace) -> int:
     for path in args.postings:
         postings.append((path, _read_posting(path)))
     ranked = matcher.rank_postings(prof["skills"], _unique_labels(postings))
-    hidden = [r for r in ranked if r["score"] < args.min_score]
-    ranked = [r for r in ranked if r["score"] >= args.min_score]
+    # A None score (no recognizable skills, issue #10) is not comparable
+    # to --min-score: it always shows, sorted last, as "n/a".
+    hidden = [r for r in ranked
+              if r["score"] is not None and r["score"] < args.min_score]
+    ranked = [r for r in ranked
+              if r["score"] is None or r["score"] >= args.min_score]
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps(ranked, indent=2))
     else:
         for r in ranked:
-            print(f"{r['score']:>3}/100  {r['label']}  "
+            score_txt = (f"{r['score']:>3}/100"
+                         if r["score"] is not None else "  n/a")
+            print(f"{score_txt}  {r['label']}  "
                   f"({len(r['matched'])}/{len(r['required'])} skills)")
         if hidden:
             print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
@@ -375,7 +386,11 @@ def cmd_applications(args: argparse.Namespace) -> int:
     for e in reversed(entries):
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
-        print(f"{e.get('date', '?')}  {e.get('score', '?')}/100  "
+        # A null score means the posting had no recognizable skills when
+        # it was tracked (issue #10) — "n/a", never "None/100".
+        score = e.get("score")
+        score_txt = f"{score}/100" if isinstance(score, (int, float)) else "n/a"
+        print(f"{e.get('date', '?')}  {score_txt}  "
               f"{company} — {role}  [{e.get('status', '?')}]")
     print(f"\n{len(entries)} application(s) tracked.")
     return 0
@@ -519,7 +534,10 @@ def cmd_update_status(args: argparse.Namespace) -> int:
         print(f"Multiple applications match '{args.company}' — '{args.role}':")
         for i in matches:
             e = entries[i]
-            print(f"  {e.get('date', '?')}  {e.get('score', '?')}/100  "
+            score = e.get("score")
+            score_txt = (f"{score}/100"
+                         if isinstance(score, (int, float)) else "n/a")
+            print(f"  {e.get('date', '?')}  {score_txt}  "
                   f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
         print("Re-run with --posting <posting file> to pick one.")
         return 1

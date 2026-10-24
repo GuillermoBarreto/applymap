@@ -28,9 +28,12 @@ def test_match_scores_overlap():
     assert report["missing"] == ["react"]
 
 
-def test_match_no_requirements_scores_zero():
+def test_match_no_requirements_scores_none():
+    # A posting with no recognizable skills is not a 0% fit (issue #10):
+    # the score is None and the flag says so explicitly.
     report = matcher.match(["python"], [])
-    assert report["score"] == 0
+    assert report["score"] is None
+    assert report["no_requirements"] is True
     assert report["matched"] == []
     assert report["missing"] == []
 
@@ -196,7 +199,8 @@ def test_rank_higher_score_still_beats_mention_depth():
 def test_rank_tiebreak_keeps_report_schema_unchanged():
     # The tie-break must not add new keys to the report dicts.
     ranked = matcher.rank_postings(["python"], [("a", "python"), ("b", "python python")])
-    assert set(ranked[0]) == {"score", "matched", "missing", "required", "label"}
+    assert set(ranked[0]) == {"score", "no_requirements", "matched",
+                             "missing", "required", "label"}
 
 
 def test_extract_finds_devops_stack_tokens():
@@ -271,3 +275,24 @@ def test_extract_unambiguous_alias_forms_still_match():
     )
     assert "go" in found
     assert "rest" in found
+
+
+def test_rank_sorts_no_requirements_postings_last():
+    # A posting with no recognizable skills (score None) ranks below even
+    # a true 0/100 (issue #10).
+    ranked = matcher.rank_postings(
+        ["python"],
+        [
+            ("skill-less", "A great place to work with motivated people."),
+            ("zero-fit", "Kubernetes and Rust engineers wanted."),
+        ],
+    )
+    assert [r["label"] for r in ranked] == ["zero-fit", "skill-less"]
+    assert ranked[0]["score"] == 0
+    assert ranked[1]["score"] is None
+
+
+def test_match_sets_no_requirements_false_when_skills_exist():
+    report = matcher.match(["python"], ["python", "react"])
+    assert report["no_requirements"] is False
+    assert report["score"] == 50
