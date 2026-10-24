@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import difflib
 import json
 import os
 import sys
@@ -679,9 +680,19 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
             if matcher.canonicalize(s) not in matcher.SKILL_TOKENS
         ]
         if unknown:
+            # Point at the likely intended spelling when one is obvious —
+            # "typscript" is almost certainly a typo for "typescript".
+            hints = []
+            for skill in unknown:
+                close = difflib.get_close_matches(
+                    skill, matcher.SKILL_TOKENS, n=1, cutoff=0.75
+                )
+                hints.append(
+                    skill + (f" (did you mean '{close[0]}'?)" if close else "")
+                )
             warnings.append(
                 "these skills aren't in the matcher's vocabulary and will "
-                f"never match a posting: {', '.join(unknown)}"
+                f"never match a posting: {', '.join(hints)}"
             )
     if not prof.get("target_roles"):
         warnings.append("no target_roles listed — add the roles you're aiming for.")

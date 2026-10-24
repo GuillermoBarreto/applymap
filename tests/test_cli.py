@@ -1407,3 +1407,27 @@ def test_untrack_posting_disambiguates_duplicates(tmp_path, monkeypatch):
     assert rc == 0
     entries = json.loads(log.read_text(encoding="utf-8"))
     assert [e["posting"] for e in entries] == ["/tmp/a.txt"]
+
+
+def test_check_profile_suggests_close_skill_spelling(tmp_path, capsys):
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h", skills=["pythn"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "pythn" in out
+    assert "did you mean 'python'?" in out
+
+
+def test_check_profile_no_suggestion_when_nothing_close(tmp_path, capsys):
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h", skills=["cobol"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "cobol" in out
+    assert "did you mean" not in out
