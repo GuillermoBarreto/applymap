@@ -71,6 +71,17 @@ def canonicalize(skill: str) -> str:
     return SKILL_ALIASES.get(key, key)
 
 
+# A few SKILL_TOKENS are also ordinary English words. Bare "go" and
+# "rest" count as skills only in tech-ish spellings — "Go" for the
+# language, "REST" for the API style (issue #6). Unambiguous surface
+# forms (golang, restful, rest-api) are not gated: they match on their
+# own via the normal token/alias scan.
+_CASE_SENSITIVE_SKILLS = {
+    "go": re.compile(r"\bGo\b"),
+    "rest": re.compile(r"\bREST\b"),
+}
+
+
 def tokenize(text: str) -> Set[str]:
     """Lowercase alphanumeric-ish tokens of the given text."""
     return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
@@ -106,7 +117,9 @@ def extract_required_skills(posting: str) -> List[str]:
     single-word tokens match against tokenized words. Aliases (e.g. "k8s")
     are resolved to their canonical form ("kubernetes"). Hyphenated
     spellings such as "REST-API" or "machine-learning" are matched through
-    aliases, since the tokenizer keeps hyphens inside tokens.
+    aliases, since the tokenizer keeps hyphens inside tokens. Bare "go"
+    and "rest" need a tech-ish spelling ("Go"/"REST") — plain lowercase
+    English words don't count (issue #6).
     """
     lowered = posting.lower()
     # Strip sentence-final dots: "TS." must tokenize as "ts", not "ts.".
@@ -119,6 +132,10 @@ def extract_required_skills(posting: str) -> List[str]:
             if _phrase_in_text(skill, lowered):
                 found.append(skill)
         elif skill in tokens:
+            pattern = _CASE_SENSITIVE_SKILLS.get(skill)
+            if pattern is not None and not pattern.search(posting):
+                # Ordinary English word, not a tech skill (issue #6).
+                continue
             found.append(skill)
     # Resolve aliases and de-duplicate, keeping sorted order.
     return sorted({canonicalize(s) for s in found})
@@ -164,14 +181,20 @@ def match(profile_skills: List[str], required: List[str]) -> Dict[str, object]:
     Returns matched and missing skills plus a 0-100 fit score. Skill
     aliases (see SKILL_ALIASES) resolve on both sides, so a profile with
     "kubernetes" matches a posting asking for "k8s".
+
+    When the posting has no recognizable requirements, the score is None
+    (and no_requirements is True) instead of 0 — a bare 0/100 is
+    indistinguishable from a true 0% fit (issue #10).
     """
     have = {canonicalize(s) for s in profile_skills}
     req = list(dict.fromkeys(canonicalize(s) for s in required))  # de-duplicate, keep order
     matched = [s for s in req if s in have]
     missing = [s for s in req if s not in have]
-    score = round(100 * len(matched) / len(req)) if req else 0
+    no_requirements = not req
+    score = None if no_requirements else round(100 * len(matched) / len(req))
     return {
         "score": score,
+        "no_requirements": no_requirements,
         "matched": matched,
         "missing": missing,
         "required": req,
@@ -187,7 +210,9 @@ def rank_postings(
     of times the matched skills appear in the posting. A posting that says
     "Python" five times is more about Python than one that says it once,
     so it ranks first among equals. The report dicts themselves are
-    unchanged — only the order differs.
+    The report dicts themselves are unchanged — only the order differs.
+    Postings with no recognizable skills (score None) sort last, below
+    even a true 0/100 (issue #10).
     """
     scored = []
     for label, text in postings:
@@ -196,5 +221,12 @@ def rank_postings(
         mentions = skill_mentions(text, report["required"])
         depth = sum(mentions.get(s, 0) for s in report["matched"])
         scored.append((report, depth))
-    scored.sort(key=lambda pair: (pair[0]["score"], pair[1]), reverse=True)
+    scored.sort(
+        key=lambda pair: (
+            pair[0]["score"] is not None,
+            pair[0]["score"] if pair[0]["score"] is not None else -1,
+            pair[1],
+        ),
+        reverse=True,
+    )
     return [report for report, _ in scored]

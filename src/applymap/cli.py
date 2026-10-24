@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import difflib
 import json
 import os
 import sys
@@ -41,6 +42,14 @@ def _read_posting(path: str) -> str:
             f"Posting file {resolved} is not valid UTF-8 text. "
             "Save it as plain UTF-8 text and try again."
         )
+    except OSError as exc:
+        # IsADirectoryError ("applymap analyze ~/postings/") or a
+        # PermissionError would otherwise dump a traceback; main()
+        # already turns RuntimeError into a friendly message.
+        raise RuntimeError(
+            f"Cannot read posting file {resolved}: "
+            f"{exc.strerror or exc}."
+        ) from exc
     if len(text) > MAX_POSTING_CHARS:
         print(f"Warning: {resolved} is {len(text):,} characters; using only "
               f"the first {MAX_POSTING_CHARS:,} — this is probably not a "
@@ -110,6 +119,14 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2))
         return 0
 
+    if report["score"] is None:
+        # No recognizable skills (issue #10): printing "Fit score: 0/100"
+        # here would be indistinguishable from a posting that matched
+        # nothing.
+        print("(No recognizable tech skills found in the posting — "
+              "the fit score is not meaningful.)")
+        return 0
+
     print(f"Fit score: {report['score']}/100\n")
     if report["matched"]:
         print("Matched skills:")
@@ -119,9 +136,6 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print("\nMissing skills:")
         for s in report["missing"]:
             print(f"  - {s} (mentioned {report['mentions'][s]}x)")
-    if not report["required"]:
-        print("(No recognizable tech skills found in the posting.)")
-        return 0
 
     if args.ai:
         if not is_configured():
@@ -159,14 +173,20 @@ def cmd_rank(args: argparse.Namespace) -> int:
     for path in args.postings:
         postings.append((path, _read_posting(path)))
     ranked = matcher.rank_postings(prof["skills"], _unique_labels(postings))
-    hidden = [r for r in ranked if r["score"] < args.min_score]
-    ranked = [r for r in ranked if r["score"] >= args.min_score]
+    # A None score (no recognizable skills, issue #10) is not comparable
+    # to --min-score: it always shows, sorted last, as "n/a".
+    hidden = [r for r in ranked
+              if r["score"] is not None and r["score"] < args.min_score]
+    ranked = [r for r in ranked
+              if r["score"] is None or r["score"] >= args.min_score]
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps(ranked, indent=2))
     else:
         for r in ranked:
-            print(f"{r['score']:>3}/100  {r['label']}  "
+            score_txt = (f"{r['score']:>3}/100"
+                         if r["score"] is not None else "  n/a")
+            print(f"{score_txt}  {r['label']}  "
                   f"({len(r['matched'])}/{len(r['required'])} skills)")
         if hidden:
             print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
@@ -375,7 +395,11 @@ def cmd_applications(args: argparse.Namespace) -> int:
     for e in reversed(entries):
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
-        print(f"{e.get('date', '?')}  {e.get('score', '?')}/100  "
+        # A null score means the posting had no recognizable skills when
+        # it was tracked (issue #10) — "n/a", never "None/100".
+        score = e.get("score")
+        score_txt = f"{score}/100" if isinstance(score, (int, float)) else "n/a"
+        print(f"{e.get('date', '?')}  {score_txt}  "
               f"{company} — {role}  [{e.get('status', '?')}]")
     print(f"\n{len(entries)} application(s) tracked.")
     return 0
@@ -519,13 +543,52 @@ def cmd_update_status(args: argparse.Namespace) -> int:
         print(f"Multiple applications match '{args.company}' — '{args.role}':")
         for i in matches:
             e = entries[i]
-            print(f"  {e.get('date', '?')}  {e.get('score', '?')}/100  "
+            score = e.get("score")
+            score_txt = (f"{score}/100"
+                         if isinstance(score, (int, float)) else "n/a")
+            print(f"  {e.get('date', '?')}  {score_txt}  "
                   f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
         print("Re-run with --posting <posting file> to pick one.")
         return 1
     entries[matches[0]]["status"] = args.status
     _save_applications(entries)
     print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
+    return 0
+
+
+def cmd_untrack(args: argparse.Namespace) -> int:
+    """Remove a tracked application from the log.
+
+    Matches entries exactly like update-status (see
+    _find_application_indexes), including the --posting escape hatch for
+    company+role duplicates. The log is rewritten atomically, like every
+    other write.
+    """
+    entries = _load_applications()
+    matches = _find_application_indexes(
+        entries, args.company, args.role, args.posting
+    )
+    if not matches:
+        hint = (
+            f" from '{args.posting}'" if args.posting else ""
+        )
+        print(f"No tracked application for '{args.company}' — '{args.role}'"
+              f"{hint}. Nothing to remove.")
+        return 1
+    if len(matches) > 1:
+        print(f"Multiple applications match '{args.company}' — '{args.role}':")
+        for i in matches:
+            e = entries[i]
+            print(f"  {e.get('date', '?')}  "
+                  f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
+        print("Re-run with --posting <posting file> to pick one.")
+        return 1
+    removed = entries.pop(matches[0])
+    _save_applications(entries)
+    company = removed.get("company") or "(unknown company)"
+    role = removed.get("role") or "(unknown role)"
+    print(f"Removed {company} — {role} "
+          f"(logged {removed.get('date', 'on an unknown date')}).")
     return 0
 
 
@@ -590,6 +653,24 @@ def _score_type(value: str) -> int:
     return score
 
 
+def _days_type(value: str) -> int:
+    """argparse type for --days: a non-negative integer.
+
+    A negative threshold would flag every tracked application, so it is
+    rejected up front with a friendly error instead of silently
+    matching everything.
+    """
+    try:
+        days = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if days < 0:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is negative; --days needs 0 or more"
+        )
+    return days
+
+
 def cmd_check_profile(args: argparse.Namespace) -> int:
     """Validate the profile and report gaps the matcher and AI need filled.
 
@@ -617,9 +698,19 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
             if matcher.canonicalize(s) not in matcher.SKILL_TOKENS
         ]
         if unknown:
+            # Point at the likely intended spelling when one is obvious —
+            # "typscript" is almost certainly a typo for "typescript".
+            hints = []
+            for skill in unknown:
+                close = difflib.get_close_matches(
+                    skill, matcher.SKILL_TOKENS, n=1, cutoff=0.75
+                )
+                hints.append(
+                    skill + (f" (did you mean '{close[0]}'?)" if close else "")
+                )
             warnings.append(
                 "these skills aren't in the matcher's vocabulary and will "
-                f"never match a posting: {', '.join(unknown)}"
+                f"never match a posting: {', '.join(hints)}"
             )
     if not prof.get("target_roles"):
         warnings.append("no target_roles listed — add the roles you're aiming for.")
@@ -704,6 +795,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "use when company+role alone matches more than one.")
     pu.set_defaults(func=cmd_update_status)
 
+    prm = sub.add_parser("untrack", help="Remove a tracked application.")
+    prm.add_argument("--company", required=True, help="Company name (matches track --company).")
+    prm.add_argument("--role", required=True, help="Role title (matches track --role).")
+    prm.add_argument("--posting", default=None, metavar="FILE",
+                    help="Only remove the application tracked from this posting file; "
+                         "use when company+role alone matches more than one.")
+    prm.set_defaults(func=cmd_untrack)
+
     ps = sub.add_parser("applications", help="List tracked applications.")
     ps.add_argument("--status", default=None,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
@@ -723,7 +822,7 @@ def build_parser() -> argparse.ArgumentParser:
     pe.set_defaults(func=cmd_export)
 
     pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
-    pf.add_argument("--days", type=int, default=30, metavar="N",
+    pf.add_argument("--days", type=_days_type, default=30, metavar="N",
                     help="Flag applications in 'applied' status for at least N days (default: 30).")
     pf.set_defaults(func=cmd_followup)
 

@@ -699,7 +699,8 @@ def test_track_warns_when_no_skills_recognized(tmp_path, monkeypatch, capsys):
     # The application is still logged — the warning is informational only.
     entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
     assert len(entries) == 1
-    assert entries[0]["score"] == 0
+    # No recognizable skills means no meaningful score (issue #10).
+    assert entries[0]["score"] is None
 
 
 def test_track_no_warning_when_skills_found(tmp_path, monkeypatch, capsys):
@@ -1218,3 +1219,244 @@ def test_analyze_json_ai_without_key_warns_and_nulls(tmp_path, capsys, monkeypat
     out = capsys.readouterr()
     assert json.loads(out.out)["gap_analysis"] is None
     assert "--ai had no effect" in out.err
+
+
+def test_analyze_no_recognizable_skills_reports_not_meaningful(tmp_path, capsys):
+    # A posting with no recognizable skills must not print "Fit score:
+    # 0/100" — it would read as a true 0% fit (issue #10).
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "vague.txt"
+    posting_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Fit score:" not in out
+    assert "not meaningful" in out
+
+
+def test_analyze_json_null_score_when_no_requirements(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "vague.txt"
+    posting_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["analyze", str(posting_path), "--profile", str(profile_path), "--json"])
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["score"] is None
+    assert report["no_requirements"] is True
+
+
+def test_rank_shows_na_for_skill_less_posting(tmp_path, capsys):
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    vague_path = tmp_path / "vague.txt"
+    vague_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["rank", str(posting_path), str(vague_path),
+               "--profile", str(profile_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "n/a" in out
+    assert "None/100" not in out
+
+
+def test_rank_min_score_keeps_skill_less_posting(tmp_path, capsys):
+    # A skill-less posting (score None) is not comparable to --min-score:
+    # it stays visible as n/a instead of being hidden or crashing the
+    # comparison (issue #10).
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    vague_path = tmp_path / "vague.txt"
+    vague_path.write_text(
+        "We are hiring a motivated team player for exciting opportunities.",
+        encoding="utf-8",
+    )
+    rc = main(["rank", str(vague_path), "--profile", str(profile_path),
+               "--min-score", "50"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "n/a" in out
+    assert "None/100" not in out
+
+
+def test_applications_shows_na_for_null_score(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "VagueCo", "role": "Person",
+                 "score": None, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["applications"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "n/a" in out
+    assert "None/100" not in out
+
+
+def test_read_posting_directory_is_friendly_error(tmp_path, capsys):
+    # Passing a directory as the posting used to dump an
+    # IsADirectoryError traceback.
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    rc = main(["analyze", str(tmp_path), "--profile", str(profile_path)])
+    assert rc == 1
+    assert "Cannot read posting file" in capsys.readouterr().err
+
+
+def test_parser_has_untrack_subcommand():
+    parser = build_parser()
+    args = parser.parse_args(["untrack", "--company", "Acme", "--role", "Dev"])
+    assert args.func.__name__ == "cmd_untrack"
+
+
+def test_untrack_removes_matching_entry(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Dev",
+                 "score": 70, "status": "applied", "posting": "/a.txt"},
+                {"date": "2026-10-02", "company": "Beta", "role": "Dev",
+                 "score": 80, "status": "applied", "posting": "/b.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Acme", "--role", "Dev"])
+    assert rc == 0
+    assert "Removed Acme" in capsys.readouterr().out
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert [e["company"] for e in entries] == ["Beta"]
+
+
+def test_untrack_not_found_is_friendly_error(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(json.dumps([]), encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Nobody", "--role", "Nothing"])
+    assert rc == 1
+    assert "Nothing to remove" in capsys.readouterr().out
+
+
+def test_untrack_ambiguous_match_needs_posting(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Dev",
+                 "score": 70, "status": "applied", "posting": "/a.txt"},
+                {"date": "2026-10-05", "company": "Acme", "role": "Dev",
+                 "score": 75, "status": "applied", "posting": "/b.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Acme", "--role", "Dev"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Multiple applications match" in out
+    assert "--posting" in out
+    # Nothing was removed.
+    assert len(json.loads(log.read_text(encoding="utf-8"))) == 2
+
+
+def test_untrack_posting_disambiguates_duplicates(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Dev",
+                 "score": 70, "status": "applied", "posting": "/tmp/a.txt"},
+                {"date": "2026-10-05", "company": "Acme", "role": "Dev",
+                 "score": 75, "status": "applied", "posting": "/tmp/b.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["untrack", "--company", "Acme", "--role", "Dev",
+               "--posting", "b.txt"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    assert [e["posting"] for e in entries] == ["/tmp/a.txt"]
+
+
+def test_check_profile_suggests_close_skill_spelling(tmp_path, capsys):
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h", skills=["pythn"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "pythn" in out
+    assert "did you mean 'python'?" in out
+
+
+def test_check_profile_no_suggestion_when_nothing_close(tmp_path, capsys):
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h", skills=["cobol"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "cobol" in out
+    assert "did you mean" not in out
+
+
+def test_followup_negative_days_is_rejected(capsys):
+    with __import__("pytest").raises(SystemExit) as exc:
+        main(["followup", "--days", "-5"])
+    assert exc.value.code == 2
+    assert "needs 0 or more" in capsys.readouterr().err
+
+
+def test_followup_zero_days_is_allowed(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": today.isoformat(), "company": "TodayCo",
+                 "role": "Dev", "score": 80, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--days", "0"])
+    assert rc == 0
+    assert "TodayCo" in capsys.readouterr().out

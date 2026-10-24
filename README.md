@@ -94,6 +94,12 @@ Move an application through the pipeline as it progresses:
 applymap update-status --company "Acme" --role "Backend Engineer" --status interview
 ```
 
+Logged something by mistake, or decided not to pursue it? Remove it:
+
+```bash
+applymap untrack --company "Acme" --role "Backend Engineer"
+```
+
 Re-applied to the same company and role under a new requisition? Two
 tracked applications can legitimately share a company and role — add
 `--posting posting-b.txt` to target the one tracked from that file. The
