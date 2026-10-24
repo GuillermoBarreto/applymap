@@ -244,3 +244,30 @@ def test_skill_mentions_counts_standalone_phrases_only():
         "spring bootcamp spring boot spring boot", ["spring boot"]
     )
     assert mentions["spring boot"] == 2
+
+
+def test_extract_ignores_plain_english_go_and_rest():
+    # The words "go"/"rest" in ordinary prose are not skills (issue #6).
+    found = matcher.extract_required_skills(
+        "We offer a great place to go further and get plenty of rest."
+    )
+    assert "go" not in found
+    assert "rest" not in found
+
+
+def test_extract_keeps_tech_spellings_of_go_and_rest():
+    found = matcher.extract_required_skills(
+        "Experience with Go and REST APIs required."
+    )
+    assert "go" in found
+    assert "rest" in found
+
+
+def test_extract_unambiguous_alias_forms_still_match():
+    # golang/restful/rest-api are unambiguous: they don't need the
+    # capitalized spelling to count (issue #6).
+    found = matcher.extract_required_skills(
+        "golang developer; RESTful service design; rest-api experience."
+    )
+    assert "go" in found
+    assert "rest" in found

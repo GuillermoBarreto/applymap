@@ -71,6 +71,17 @@ def canonicalize(skill: str) -> str:
     return SKILL_ALIASES.get(key, key)
 
 
+# A few SKILL_TOKENS are also ordinary English words. Bare "go" and
+# "rest" count as skills only in tech-ish spellings — "Go" for the
+# language, "REST" for the API style (issue #6). Unambiguous surface
+# forms (golang, restful, rest-api) are not gated: they match on their
+# own via the normal token/alias scan.
+_CASE_SENSITIVE_SKILLS = {
+    "go": re.compile(r"\bGo\b"),
+    "rest": re.compile(r"\bREST\b"),
+}
+
+
 def tokenize(text: str) -> Set[str]:
     """Lowercase alphanumeric-ish tokens of the given text."""
     return set(re.findall(r"[a-z0-9][a-z0-9+#./\-]*", text.lower()))
@@ -106,7 +117,9 @@ def extract_required_skills(posting: str) -> List[str]:
     single-word tokens match against tokenized words. Aliases (e.g. "k8s")
     are resolved to their canonical form ("kubernetes"). Hyphenated
     spellings such as "REST-API" or "machine-learning" are matched through
-    aliases, since the tokenizer keeps hyphens inside tokens.
+    aliases, since the tokenizer keeps hyphens inside tokens. Bare "go"
+    and "rest" need a tech-ish spelling ("Go"/"REST") — plain lowercase
+    English words don't count (issue #6).
     """
     lowered = posting.lower()
     # Strip sentence-final dots: "TS." must tokenize as "ts", not "ts.".
@@ -119,6 +132,10 @@ def extract_required_skills(posting: str) -> List[str]:
             if _phrase_in_text(skill, lowered):
                 found.append(skill)
         elif skill in tokens:
+            pattern = _CASE_SENSITIVE_SKILLS.get(skill)
+            if pattern is not None and not pattern.search(posting):
+                # Ordinary English word, not a tech skill (issue #6).
+                continue
             found.append(skill)
     # Resolve aliases and de-duplicate, keeping sorted order.
     return sorted({canonicalize(s) for s in found})
