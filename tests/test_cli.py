@@ -1431,3 +1431,32 @@ def test_check_profile_no_suggestion_when_nothing_close(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "cobol" in out
     assert "did you mean" not in out
+
+
+def test_followup_negative_days_is_rejected(capsys):
+    with __import__("pytest").raises(SystemExit) as exc:
+        main(["followup", "--days", "-5"])
+    assert exc.value.code == 2
+    assert "needs 0 or more" in capsys.readouterr().err
+
+
+def test_followup_zero_days_is_allowed(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": today.isoformat(), "company": "TodayCo",
+                 "role": "Dev", "score": 80, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--days", "0"])
+    assert rc == 0
+    assert "TodayCo" in capsys.readouterr().out

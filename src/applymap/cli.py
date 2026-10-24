@@ -653,6 +653,24 @@ def _score_type(value: str) -> int:
     return score
 
 
+def _days_type(value: str) -> int:
+    """argparse type for --days: a non-negative integer.
+
+    A negative threshold would flag every tracked application, so it is
+    rejected up front with a friendly error instead of silently
+    matching everything.
+    """
+    try:
+        days = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if days < 0:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is negative; --days needs 0 or more"
+        )
+    return days
+
+
 def cmd_check_profile(args: argparse.Namespace) -> int:
     """Validate the profile and report gaps the matcher and AI need filled.
 
@@ -804,7 +822,7 @@ def build_parser() -> argparse.ArgumentParser:
     pe.set_defaults(func=cmd_export)
 
     pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
-    pf.add_argument("--days", type=int, default=30, metavar="N",
+    pf.add_argument("--days", type=_days_type, default=30, metavar="N",
                     help="Flag applications in 'applied' status for at least N days (default: 30).")
     pf.set_defaults(func=cmd_followup)
 
