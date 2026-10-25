@@ -411,6 +411,8 @@ def cmd_applications(args: argparse.Namespace) -> int:
 def cmd_export(args: argparse.Namespace) -> int:
     """Write tracked applications to a CSV or JSON file for spreadsheets/scripts."""
     entries = _load_applications()
+    if args.status:
+        entries = [e for e in entries if e.get("status") == args.status]
     # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
     # literal "~" directory; create missing parent folders too.
     out = Path(args.csv).expanduser()
@@ -820,6 +822,9 @@ def build_parser() -> argparse.ArgumentParser:
     pe = sub.add_parser("export", help="Export tracked applications to CSV or JSON.")
     pe.add_argument("--csv", required=True, metavar="PATH",
                     help="File to write (creates parent folders).")
+    pe.add_argument("--status", default=None,
+                    choices=["interested", "applied", "interview", "offer", "rejected"],
+                    help="Only export applications with this status.")
     pe.add_argument("--format", default="csv", choices=["csv", "json"],
                     help="Export format (default: csv).")
     pe.set_defaults(func=cmd_export)
