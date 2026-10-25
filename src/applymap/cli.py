@@ -284,10 +284,10 @@ def cmd_track(args: argparse.Namespace) -> int:
     posting_path = str(Path(args.posting).expanduser().resolve())
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
     if not report["required"]:
-        # A 0/100 from "no recognizable skills" is not a real mismatch —
-        # say so instead of silently logging a meaningless score.
+        # A None score from "no recognizable skills" is not a real
+        # mismatch — say so instead of logging a meaningless score.
         print("(No recognizable tech skills found in the posting — "
-              "the 0/100 score means nothing was matched.)")
+              "no fit score was recorded.)")
     record = {
         "date": _track_date(args.date),
         "company": args.company or "",
@@ -304,7 +304,9 @@ def cmd_track(args: argparse.Namespace) -> int:
         return 0
     entries.append(record)
     _save_applications(entries)
-    print(f"Logged application ({record['date']}, score {record['score']}/100) "
+    score_txt = (f"{record['score']}/100"
+                 if isinstance(record["score"], (int, float)) else "n/a")
+    print(f"Logged application ({record['date']}, score {score_txt}) "
           f"to {TRACKING_PATH}")
     return 0
 
