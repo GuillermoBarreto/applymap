@@ -27,6 +27,7 @@ SKILL_TOKENS = {
     "kafka", "rabbitmq", "elasticsearch", "opensearch",
     "s3", "ec2", "lambda", "dynamodb",
     "firebase", "supabase", "vite", "express", "nestjs",
+    "html", "css",
     # Frequently-requested in infra/devops postings but previously missed.
     "microservices", "websockets", "devops", "serverless", "unix",
     "powershell", "gradle", "maven", "helm",
