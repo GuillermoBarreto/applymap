@@ -32,7 +32,8 @@ def _read_posting(path: str) -> str:
     """
     resolved = Path(path).expanduser()
     try:
-        text = resolved.read_text(encoding="utf-8")
+        with open(resolved, "r", encoding="utf-8") as fh:
+            text = fh.read(MAX_POSTING_CHARS + 1)
     except FileNotFoundError:
         raise FileNotFoundError(
             f"Posting file not found: {resolved}. Check the path and try again."
@@ -51,9 +52,9 @@ def _read_posting(path: str) -> str:
             f"{exc.strerror or exc}."
         ) from exc
     if len(text) > MAX_POSTING_CHARS:
-        print(f"Warning: {resolved} is {len(text):,} characters; using only "
-              f"the first {MAX_POSTING_CHARS:,} — this is probably not a "
-              "job posting.")
+        print(f"Warning: {resolved} is over {MAX_POSTING_CHARS:,} characters; "
+              f"using only the first {MAX_POSTING_CHARS:,} — this is probably "
+              "not a job posting.")
         text = text[:MAX_POSTING_CHARS]
     return text
 
@@ -284,10 +285,10 @@ def cmd_track(args: argparse.Namespace) -> int:
     posting_path = str(Path(args.posting).expanduser().resolve())
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
     if not report["required"]:
-        # A 0/100 from "no recognizable skills" is not a real mismatch —
-        # say so instead of silently logging a meaningless score.
+        # A None score from "no recognizable skills" is not a real
+        # mismatch — say so instead of logging a meaningless score.
         print("(No recognizable tech skills found in the posting — "
-              "the 0/100 score means nothing was matched.)")
+              "no fit score was recorded.)")
     record = {
         "date": _track_date(args.date),
         "company": args.company or "",
@@ -304,7 +305,9 @@ def cmd_track(args: argparse.Namespace) -> int:
         return 0
     entries.append(record)
     _save_applications(entries)
-    print(f"Logged application ({record['date']}, score {record['score']}/100) "
+    score_txt = (f"{record['score']}/100"
+                 if isinstance(record["score"], (int, float)) else "n/a")
+    print(f"Logged application ({record['date']}, score {score_txt}) "
           f"to {TRACKING_PATH}")
     return 0
 
@@ -392,7 +395,7 @@ def cmd_applications(args: argparse.Namespace) -> int:
         else:
             print("No applications tracked yet. Log one with `applymap track`.")
         return 0
-    for e in reversed(entries):
+    for e in sorted(entries, key=lambda e: e.get("date") or "", reverse=True):
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
         # A null score means the posting had no recognizable skills when
@@ -408,6 +411,8 @@ def cmd_applications(args: argparse.Namespace) -> int:
 def cmd_export(args: argparse.Namespace) -> int:
     """Write tracked applications to a CSV or JSON file for spreadsheets/scripts."""
     entries = _load_applications()
+    if args.status:
+        entries = [e for e in entries if e.get("status") == args.status]
     # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
     # literal "~" directory; create missing parent folders too.
     out = Path(args.csv).expanduser()
@@ -817,6 +822,9 @@ def build_parser() -> argparse.ArgumentParser:
     pe = sub.add_parser("export", help="Export tracked applications to CSV or JSON.")
     pe.add_argument("--csv", required=True, metavar="PATH",
                     help="File to write (creates parent folders).")
+    pe.add_argument("--status", default=None,
+                    choices=["interested", "applied", "interview", "offer", "rejected"],
+                    help="Only export applications with this status.")
     pe.add_argument("--format", default="csv", choices=["csv", "json"],
                     help="Export format (default: csv).")
     pe.set_defaults(func=cmd_export)
