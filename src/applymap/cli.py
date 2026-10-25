@@ -32,7 +32,8 @@ def _read_posting(path: str) -> str:
     """
     resolved = Path(path).expanduser()
     try:
-        text = resolved.read_text(encoding="utf-8")
+        with open(resolved, "r", encoding="utf-8") as fh:
+            text = fh.read(MAX_POSTING_CHARS + 1)
     except FileNotFoundError:
         raise FileNotFoundError(
             f"Posting file not found: {resolved}. Check the path and try again."
@@ -51,9 +52,9 @@ def _read_posting(path: str) -> str:
             f"{exc.strerror or exc}."
         ) from exc
     if len(text) > MAX_POSTING_CHARS:
-        print(f"Warning: {resolved} is {len(text):,} characters; using only "
-              f"the first {MAX_POSTING_CHARS:,} — this is probably not a "
-              "job posting.")
+        print(f"Warning: {resolved} is over {MAX_POSTING_CHARS:,} characters; "
+              f"using only the first {MAX_POSTING_CHARS:,} — this is probably "
+              "not a job posting.")
         text = text[:MAX_POSTING_CHARS]
     return text
 
