@@ -394,7 +394,7 @@ def cmd_applications(args: argparse.Namespace) -> int:
         else:
             print("No applications tracked yet. Log one with `applymap track`.")
         return 0
-    for e in reversed(entries):
+    for e in sorted(entries, key=lambda e: e.get("date") or "", reverse=True):
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
         # A null score means the posting had no recognizable skills when
