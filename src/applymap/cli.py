@@ -699,7 +699,8 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
     skills = prof.get("skills", [])
     if not skills:
         warnings.append(
-            "no skills listed — analyze and track scores will always be 0."
+            "no skills listed — analyze has no fit score to report and "
+            "track records n/a."
         )
     else:
         unknown = [
