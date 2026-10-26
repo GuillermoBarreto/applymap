@@ -601,7 +601,8 @@ def test_applications_json_output(tmp_path, monkeypatch, capsys):
     assert rc == 0
     entries = json.loads(capsys.readouterr().out)
     assert len(entries) == 2
-    assert entries[0]["company"] == "Acme"
+    assert entries[0]["company"] == "Globex"  # newest first, same as text output
+    assert entries[1]["company"] == "Acme"
 
 
 def test_applications_json_respects_status_filter(tmp_path, monkeypatch, capsys):
