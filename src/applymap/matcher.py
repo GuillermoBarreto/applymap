@@ -28,6 +28,8 @@ SKILL_TOKENS = {
     "s3", "ec2", "lambda", "dynamodb",
     "firebase", "supabase", "vite", "express", "nestjs",
     "html", "css",
+    # Languages and tools that show up in real postings but were missed.
+    "ruby", "php", "swift", "kotlin", "figma",
     # Frequently-requested in infra/devops postings but previously missed.
     "microservices", "websockets", "devops", "serverless", "unix",
     "powershell", "gradle", "maven", "helm",
