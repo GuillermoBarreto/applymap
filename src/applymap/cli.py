@@ -385,6 +385,10 @@ def cmd_applications(args: argparse.Namespace) -> int:
     entries = _load_applications()
     if args.status:
         entries = [e for e in entries if e.get("status") == args.status]
+    # Newest first, same order as the text listing below — the JSON
+    # output used to come back in raw insertion order, which disagreed
+    # with what `applications` prints.
+    entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps(entries, indent=2))
@@ -695,7 +699,8 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
     skills = prof.get("skills", [])
     if not skills:
         warnings.append(
-            "no skills listed — analyze and track scores will always be 0."
+            "no skills listed — analyze has no fit score to report and "
+            "track records n/a."
         )
     else:
         unknown = [
