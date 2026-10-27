@@ -133,6 +133,31 @@ def test_chat_timeout_raises_runtime_error(monkeypatch):
             raise AssertionError("expected RuntimeError")
 
 
+def test_chat_non_json_response_raises_runtime_error(monkeypatch):
+    """A 200 with an HTML body used to dump a JSONDecodeError traceback (issue #26)."""
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+
+    class _RawResponse:
+        def read(self):
+            return b"<html>not an api response</html>"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    with mock.patch(
+        "urllib.request.urlopen", return_value=_RawResponse()
+    ):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "not valid JSON" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+
+
 def test_chat_null_content_raises_runtime_error(monkeypatch):
     monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
     with mock.patch(

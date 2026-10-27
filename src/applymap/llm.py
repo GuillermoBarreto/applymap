@@ -56,7 +56,7 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         raise RuntimeError(
             f"API request failed with HTTP {exc.code} "
@@ -74,6 +74,15 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         raise RuntimeError(
             f"API request failed: {exc}. Check APPLYMAP_API_BASE "
             "and your network connection."
+        ) from exc
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        # A proxy or a wrong APPLYMAP_API_BASE can answer 200 with HTML;
+        # that used to surface as a bare JSONDecodeError traceback (issue #26).
+        raise RuntimeError(
+            "API response was not valid JSON. Check APPLYMAP_API_BASE "
+            "— it may point at a non-API endpoint."
         ) from exc
     try:
         content = body["choices"][0]["message"]["content"]
