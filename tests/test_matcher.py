@@ -267,6 +267,15 @@ def test_extract_keeps_tech_spellings_of_go_and_rest():
     assert "rest" in found
 
 
+def test_extract_all_caps_go_counts_as_the_language():
+    # Postings often shout the language: "GO developer" is the language,
+    # not the English verb (issue #6's gate only allowed "Go" before).
+    found = matcher.extract_required_skills(
+        "GO developer wanted: goroutines, channels, and strong testing habits."
+    )
+    assert "go" in found
+
+
 def test_extract_unambiguous_alias_forms_still_match():
     # golang/restful/rest-api are unambiguous: they don't need the
     # capitalized spelling to count (issue #6).

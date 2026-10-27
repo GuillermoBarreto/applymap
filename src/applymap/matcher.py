@@ -75,12 +75,12 @@ def canonicalize(skill: str) -> str:
 
 
 # A few SKILL_TOKENS are also ordinary English words. Bare "go" and
-# "rest" count as skills only in tech-ish spellings — "Go" for the
+# "rest" count as skills only in tech-ish spellings — "Go"/"GO" for the
 # language, "REST" for the API style (issue #6). Unambiguous surface
 # forms (golang, restful, rest-api) are not gated: they match on their
 # own via the normal token/alias scan.
 _CASE_SENSITIVE_SKILLS = {
-    "go": re.compile(r"\bGo\b"),
+    "go": re.compile(r"\bGo\b|\bGO\b"),
     "rest": re.compile(r"\bREST\b"),
 }
 
