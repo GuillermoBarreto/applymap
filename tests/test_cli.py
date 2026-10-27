@@ -899,12 +899,37 @@ def test_followup_lists_stale_applications_oldest_first(tmp_path, monkeypatch, c
     rc = main(["followup"])
     assert rc == 0
     lines = [l for l in capsys.readouterr().out.splitlines() if " 45d" in l or " 60d" in l]
-    assert len(lines) == 2
+    assert len(lines) == 3
     assert "OlderCo" in lines[0]  # longest waiting first
     assert "StaleCo" in lines[1]
-    assert "InterviewCo" not in capsys.readouterr().out
+    assert "InterviewCo" in lines[2]  # interview status counts too (issue #24)
+    assert "[interview]" in lines[2]
     assert "RecentCo" not in capsys.readouterr().out
     assert "BadDateCo" not in capsys.readouterr().out  # bad date skipped, not crashed
+
+
+def test_followup_ignores_offer_rejected_and_interested(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    old = (today - datetime.timedelta(days=45)).isoformat()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": old, "company": "OfferCo", "role": "Dev", "score": 90, "status": "offer"},
+                {"date": old, "company": "RejectedCo", "role": "Dev", "score": 50, "status": "rejected"},
+                {"date": old, "company": "WishlistCo", "role": "Dev", "score": 70, "status": "interested"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup"])
+    assert rc == 0
+    assert "All caught up" in capsys.readouterr().out
 
 
 def test_followup_custom_days_threshold(tmp_path, monkeypatch, capsys):

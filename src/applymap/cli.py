@@ -602,12 +602,17 @@ def cmd_untrack(args: argparse.Namespace) -> int:
 
 
 def cmd_followup(args: argparse.Namespace) -> int:
-    """List applications still waiting for a response after --days days."""
+    """List applications still waiting for a response after --days days.
+
+    Both "applied" and "interview" applications count: an interview
+    that has gone quiet for weeks still needs a nudge (issue #24).
+    Offers, rejections, and wishlist ("interested") entries don't.
+    """
     entries = _load_applications()
     today = datetime.date.today()
     stale = []
     for e in entries:
-        if e.get("status") != "applied":
+        if e.get("status") not in ("applied", "interview"):
             continue
         try:
             logged = datetime.date.fromisoformat(e.get("date") or "")
@@ -627,7 +632,7 @@ def cmd_followup(args: argparse.Namespace) -> int:
     for waiting, e in stale:
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
-        print(f"  {waiting}d  {company} — {role} (logged {e.get('date')})")
+        print(f"  {waiting}d  [{e.get('status')}]  {company} — {role} (logged {e.get('date')})")
     return 0
 
 
