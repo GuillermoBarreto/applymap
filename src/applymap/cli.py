@@ -52,9 +52,11 @@ def _read_posting(path: str) -> str:
             f"{exc.strerror or exc}."
         ) from exc
     if len(text) > MAX_POSTING_CHARS:
+        # stderr, not stdout: the warning used to land in front of the
+        # JSON when analyze/rank ran with --json, breaking parsers (issue #31).
         print(f"Warning: {resolved} is over {MAX_POSTING_CHARS:,} characters; "
               f"using only the first {MAX_POSTING_CHARS:,} — this is probably "
-              "not a job posting.")
+              "not a job posting.", file=sys.stderr)
         text = text[:MAX_POSTING_CHARS]
     return text
 
