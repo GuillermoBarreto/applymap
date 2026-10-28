@@ -152,7 +152,10 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
     Single-word skills count whole-token occurrences and multi-word
     skills (e.g. "spring boot") count substring occurrences — the same
     rules extract_required_skills uses, so the counts always agree with
-    what the extractor found. Skills never mentioned map to 0.
+    what the extractor found. Skills never mentioned map to 0. Bare "go"
+    and "rest" only count in their tech spellings ("Go"/"GO", "REST"):
+    a lowercase "go" in "we go the extra mile" is plain English, not a
+    mention of the language (issue #28).
     """
     lowered = posting.lower()
     # Raw token list (not the deduped set from tokenize): duplicates matter
@@ -160,6 +163,12 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
     tokens = [
         t.rstrip(".")
         for t in re.findall(r"[a-z0-9][a-z0-9+#./\-]*", lowered)
+    ]
+    # Case-preserving tokens, for the gated skills above: the lowered
+    # tokens can't tell "Go" the language from "go" the English word.
+    raw_tokens = [
+        t.rstrip(".")
+        for t in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+#./\-]*", posting)
     ]
     # All surface forms that resolve to each canonical skill.
     forms: Dict[str, List[str]] = {}
@@ -170,7 +179,17 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
         canon = canonicalize(skill)
         total = 0
         for form in forms.get(canon, [canon]):
-            if " " in form or "/" in form or "." in form:
+            pattern = _CASE_SENSITIVE_SKILLS.get(form)
+            if pattern is not None:
+                # Gated skill: only tokens spelled like the tech term
+                # count ("Go"/"GO", "REST"). The lowercase-equality check
+                # keeps hyphenated forms ("REST-API") from double-counting
+                # here — those count once via their own form below.
+                total += sum(
+                    1 for t in raw_tokens
+                    if t.lower() == form and pattern.search(t)
+                )
+            elif " " in form or "/" in form or "." in form:
                 total += _phrase_occurrences(form, lowered)
             else:
                 total += sum(1 for t in tokens if t == form)

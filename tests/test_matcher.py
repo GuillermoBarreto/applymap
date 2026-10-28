@@ -151,13 +151,23 @@ def test_skill_mentions_multiword_counts_substrings():
 
 
 def test_skill_mentions_uses_same_rules_as_extractor():
-    # "go" as a plain English word is found by extract_required_skills too
-    # (a known token-matching limitation); mentions must stay consistent
-    # with the extractor rather than silently disagreeing.
+    # "go" reaches the extractor here through the "golang" alias, not
+    # through the plain English word — mentions must agree (issue #28):
+    # only the alias occurrence counts, the English "go" does not.
     posting = "We go the extra mile for our customers. Golang a plus."
     assert "go" in matcher.extract_required_skills(posting)
     mentions = matcher.skill_mentions(posting, ["go"])
-    assert mentions["go"] == 2  # the English "go" token + the "golang" alias
+    assert mentions["go"] == 1  # the "golang" alias only
+
+
+def test_skill_mentions_ignores_plain_english_go_and_rest():
+    posting = (
+        "Go developer wanted. We go the extra mile, go team go. "
+        "REST API design; get some rest after work."
+    )
+    mentions = matcher.skill_mentions(posting, ["go", "rest"])
+    assert mentions["go"] == 1  # only the "Go" token, not the English words
+    assert mentions["rest"] == 1  # only "REST", not lowercase "rest"
 
 
 def test_extract_resolves_fused_js_spellings():
