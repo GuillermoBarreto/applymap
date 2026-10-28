@@ -1102,9 +1102,29 @@ def test_read_posting_truncates_huge_file_with_warning(tmp_path, monkeypatch, ca
     text = cli_mod._read_posting(str(big))
     assert len(text) == 50
     assert text.startswith("python")
-    out = capsys.readouterr().out
-    assert "Warning" in out
-    assert "probably not a job posting" in out
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Warning" in captured.err
+    assert "probably not a job posting" in captured.err
+
+
+def test_analyze_json_output_stays_valid_for_oversized_posting(
+    tmp_path, monkeypatch, capsys
+):
+    import json
+
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "MAX_POSTING_CHARS", 50)
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    big = tmp_path / "huge.txt"
+    big.write_text("python sql docker " * 20, encoding="utf-8")
+    rc = main(["analyze", str(big), "--profile", str(profile_path), "--json"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert report["score"] is not None
+    assert "Warning" in captured.err
 
 
 def test_read_posting_normal_file_untouched(tmp_path, capsys):
