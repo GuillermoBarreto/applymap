@@ -1506,3 +1506,24 @@ def test_followup_zero_days_is_allowed(tmp_path, monkeypatch, capsys):
     rc = main(["followup", "--days", "0"])
     assert rc == 0
     assert "TodayCo" in capsys.readouterr().out
+
+
+def test_rank_json_with_csv_keeps_stdout_parseable(tmp_path, capsys):
+    # Issue #33: rank --json --csv used to print "Wrote ranking to ..."
+    # on stdout after the JSON, so piping stdout into jq failed. The
+    # notice now goes to stderr and stdout stays pure JSON.
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    csv_path = tmp_path / "rank.csv"
+    rc = main(["rank", str(good), "--profile", str(profile_path),
+               "--json", "--csv", str(csv_path)])
+    assert rc == 0
+    captured = capsys.readouterr()
+    ranked = json.loads(captured.out)
+    assert [r["label"] for r in ranked] == ["good"]
+    assert "Wrote ranking" not in captured.out
+    assert "Wrote ranking" in captured.err
+    assert csv_path.exists()
