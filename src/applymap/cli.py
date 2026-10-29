@@ -195,7 +195,11 @@ def cmd_rank(args: argparse.Namespace) -> int:
             print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
     if args.csv:
         _write_rank_csv(args.csv, ranked)
-        print(f"Wrote ranking to {args.csv}")
+        # With --json the CSV notice used to land on stdout after the JSON
+        # (issue #33), breaking parsers piping the output into jq. Status
+        # chatter goes to stderr whenever stdout is machine-readable.
+        print(f"Wrote ranking to {args.csv}",
+              file=sys.stderr if args.json else sys.stdout)
     return 0
 
 
