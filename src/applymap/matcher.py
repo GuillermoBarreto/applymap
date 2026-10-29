@@ -28,6 +28,8 @@ SKILL_TOKENS = {
     "s3", "ec2", "lambda", "dynamodb",
     "firebase", "supabase", "vite", "express", "nestjs",
     "html", "css",
+    # Mobile / frontend / data stacks that show up in real postings.
+    "flutter", "dart", "svelte", "nuxt", "prisma", "airflow", "dbt",
     # Languages and tools that show up in real postings but were missed.
     "ruby", "php", "swift", "kotlin", "figma",
     # Frequently-requested in infra/devops postings but previously missed.
@@ -232,7 +234,7 @@ def rank_postings(
     of times the matched skills appear in the posting. A posting that says
     "Python" five times is more about Python than one that says it once,
     so it ranks first among equals. The report dicts themselves are
-    The report dicts themselves are unchanged — only the order differs.
+    unchanged — only the order differs.
     Postings with no recognizable skills (score None) sort last, below
     even a true 0/100 (issue #10).
     """
