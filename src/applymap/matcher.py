@@ -35,6 +35,8 @@ SKILL_TOKENS = {
     # Frequently-requested in infra/devops postings but previously missed.
     "microservices", "websockets", "devops", "serverless", "unix",
     "powershell", "gradle", "maven", "helm",
+    # Infra and testing tools that show up in real postings.
+    "ansible", "nginx", "prometheus", "grafana", "cypress",
 }
 
 
