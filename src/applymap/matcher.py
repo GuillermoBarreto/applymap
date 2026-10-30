@@ -246,6 +246,9 @@ def rank_postings(
         report["label"] = label
         mentions = skill_mentions(text, report["required"])
         depth = sum(mentions.get(s, 0) for s in report["matched"])
+        # analyze --json already includes mentions; rank --json used to
+        # drop them even though they were computed here for tie-breaking.
+        report["mentions"] = mentions
         scored.append((report, depth))
     scored.sort(
         key=lambda pair: (
