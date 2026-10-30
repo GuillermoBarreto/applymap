@@ -207,10 +207,11 @@ def test_rank_higher_score_still_beats_mention_depth():
 
 
 def test_rank_tiebreak_keeps_report_schema_unchanged():
-    # The tie-break must not add new keys to the report dicts.
+    # The tie-break must not add new keys to the report dicts beyond
+    # mentions, which rank reports now carry like analyze reports do.
     ranked = matcher.rank_postings(["python"], [("a", "python"), ("b", "python python")])
     assert set(ranked[0]) == {"score", "no_requirements", "matched",
-                             "missing", "required", "label"}
+                             "missing", "required", "label", "mentions"}
 
 
 def test_extract_finds_devops_stack_tokens():
@@ -315,3 +316,16 @@ def test_match_sets_no_requirements_false_when_skills_exist():
     report = matcher.match(["python"], ["python", "react"])
     assert report["no_requirements"] is False
     assert report["score"] == 50
+
+
+def test_extract_finds_infra_and_testing_tokens():
+    found = matcher.extract_required_skills(
+        "Ansible playbooks, nginx reverse proxy, Prometheus and Grafana "
+        "dashboards, Cypress end-to-end tests."
+    )
+    assert {"ansible", "nginx", "prometheus", "grafana", "cypress"} <= set(found)
+
+
+def test_rank_includes_mention_counts():
+    ranked = matcher.rank_postings(["python"], [("a", "python python")])
+    assert ranked[0]["mentions"] == {"python": 2}
