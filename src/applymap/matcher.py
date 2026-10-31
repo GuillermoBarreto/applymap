@@ -74,6 +74,11 @@ SKILL_ALIASES = {
 
 def canonicalize(skill: str) -> str:
     """Map a skill to its canonical form, resolving aliases."""
+    if not isinstance(skill, str):
+        # A non-string skill (None, a list from a sloppy profile) used to
+        # die deep inside .strip() with an AttributeError that blamed
+        # nothing. Fail at the boundary with the actual problem instead.
+        raise TypeError(f"skill must be a string, got {type(skill).__name__}")
     key = skill.strip().lower()
     return SKILL_ALIASES.get(key, key)
 
@@ -128,6 +133,10 @@ def extract_required_skills(posting: str) -> List[str]:
     and "rest" need a tech-ish spelling ("Go"/"REST") — plain lowercase
     English words don't count (issue #6).
     """
+    if not isinstance(posting, str):
+        # Same boundary rule as canonicalize: a None or bytes posting used
+        # to crash on .lower() with a bare AttributeError.
+        raise TypeError(f"posting must be a string, got {type(posting).__name__}")
     lowered = posting.lower()
     # Strip sentence-final dots: "TS." must tokenize as "ts", not "ts.".
     tokens = {t.rstrip(".") for t in tokenize(posting)}
@@ -153,6 +162,7 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
 
     Alias spellings (e.g. "k8s") count toward their canonical skill
     ("kubernetes"), matching the behavior of extract_required_skills.
+    A non-string posting raises TypeError, like extract_required_skills.
     Single-word skills count whole-token occurrences and multi-word
     skills (e.g. "spring boot") count substring occurrences — the same
     rules extract_required_skills uses, so the counts always agree with
@@ -161,6 +171,8 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
     a lowercase "go" in "we go the extra mile" is plain English, not a
     mention of the language (issue #28).
     """
+    if not isinstance(posting, str):
+        raise TypeError(f"posting must be a string, got {type(posting).__name__}")
     lowered = posting.lower()
     # Raw token list (not the deduped set from tokenize): duplicates matter
     # for counting.
