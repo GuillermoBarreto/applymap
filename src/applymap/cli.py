@@ -870,7 +870,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
     pf.add_argument("--days", type=_days_type, default=30, metavar="N",
-                    help="Flag applications in 'applied' status for at least N days (default: 30).")
+                    help="Flag applications in 'applied' or 'interview' status for at least N days (default: 30).")
     pf.set_defaults(func=cmd_followup)
 
     return p
