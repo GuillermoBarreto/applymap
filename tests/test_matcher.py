@@ -329,3 +329,14 @@ def test_extract_finds_infra_and_testing_tokens():
 def test_rank_includes_mention_counts():
     ranked = matcher.rank_postings(["python"], [("a", "python python")])
     assert ranked[0]["mentions"] == {"python": 2}
+
+
+def test_non_string_posting_raises_type_error():
+    import pytest
+
+    with pytest.raises(TypeError, match="posting must be a string"):
+        matcher.extract_required_skills(None)
+    with pytest.raises(TypeError, match="posting must be a string"):
+        matcher.skill_mentions(123, ["python"])
+    with pytest.raises(TypeError, match="skill must be a string"):
+        matcher.canonicalize(["python"])
