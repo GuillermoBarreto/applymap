@@ -182,6 +182,12 @@ def cmd_rank(args: argparse.Namespace) -> int:
               if r["score"] is not None and r["score"] < args.min_score]
     ranked = [r for r in ranked
               if r["score"] is None or r["score"] >= args.min_score]
+    # --limit keeps only the top N after scoring and filtering, so a long
+    # posting list stays readable; the cut-off count is reported below.
+    limited = []
+    if args.limit is not None and len(ranked) > args.limit:
+        limited = ranked[args.limit:]
+        ranked = ranked[:args.limit]
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps(ranked, indent=2))
@@ -193,6 +199,8 @@ def cmd_rank(args: argparse.Namespace) -> int:
                   f"({len(r['matched'])}/{len(r['required'])} skills)")
         if hidden:
             print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
+        if limited:
+            print(f"({len(limited)} posting(s) below --limit {args.limit} hidden)")
     if args.csv:
         _write_rank_csv(args.csv, ranked)
         # With --json the CSV notice used to land on stdout after the JSON
@@ -673,6 +681,19 @@ def _score_type(value: str) -> int:
     return score
 
 
+def _limit_type(value: str) -> int:
+    """argparse type for --limit: a positive integer."""
+    try:
+        limit = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+    if limit < 1:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not positive; --limit needs 1 or more"
+        )
+    return limit
+
+
 def _days_type(value: str) -> int:
     """argparse type for --days: a non-negative integer.
 
@@ -780,6 +801,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Also write the ranking to a CSV file.")
     pr.add_argument("--min-score", default=0, type=_score_type, metavar="0-100",
                     help="Hide postings scoring below this fit score.")
+    pr.add_argument("--limit", default=None, type=_limit_type, metavar="N",
+                    help="Show only the top N postings after ranking.")
     pr.add_argument("--json", action="store_true",
                     help="Print the ranking as JSON instead of text.")
     pr.set_defaults(func=cmd_rank)

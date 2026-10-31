@@ -1527,3 +1527,25 @@ def test_rank_json_with_csv_keeps_stdout_parseable(tmp_path, capsys):
     assert "Wrote ranking" not in captured.out
     assert "Wrote ranking" in captured.err
     assert csv_path.exists()
+
+
+def test_rank_limit_shows_only_top_postings(tmp_path, capsys):
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--limit", "1"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "good" in out
+    assert "bad" not in out.split("hidden")[0]
+    assert "1 posting(s) below --limit 1 hidden" in out
+
+
+def test_rank_limit_rejects_zero(capsys):
+    with __import__("pytest").raises(SystemExit) as exc:
+        main(["rank", "x.txt", "--limit", "0"])
+    assert exc.value.code == 2
+    assert "not positive" in capsys.readouterr().err
