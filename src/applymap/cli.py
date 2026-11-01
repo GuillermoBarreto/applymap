@@ -859,7 +859,10 @@ def build_parser() -> argparse.ArgumentParser:
     pst.set_defaults(func=cmd_stats)
 
     pe = sub.add_parser("export", help="Export tracked applications to CSV or JSON.")
-    pe.add_argument("--csv", required=True, metavar="PATH",
+    # --output is the honest name for this flag: the file's content is
+    # set by --format, so a JSON export written via --csv was confusing
+    # (issue #38). --csv stays as an alias so existing scripts keep working.
+    pe.add_argument("--csv", "--output", required=True, metavar="PATH",
                     help="File to write (creates parent folders).")
     pe.add_argument("--status", default=None,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
