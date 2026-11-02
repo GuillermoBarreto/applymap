@@ -451,8 +451,12 @@ def cmd_export(args: argparse.Namespace) -> int:
                     e.get("role", ""),
                     e.get("status", ""),
                     e.get("score", ""),
-                    "; ".join(e.get("matched_skills", [])),
-                    "; ".join(e.get("missing_skills", [])),
+                    # A null skill list (hand-edited log, or a record
+                    # written before those fields existed) is not a
+                    # missing field: .get() returns None and join()
+                    # raised TypeError, killing the whole export.
+                    "; ".join(e.get("matched_skills") or []),
+                    "; ".join(e.get("missing_skills") or []),
                     e.get("posting", ""),
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
