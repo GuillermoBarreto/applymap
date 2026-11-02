@@ -1549,3 +1549,45 @@ def test_rank_limit_rejects_zero(capsys):
         main(["rank", "x.txt", "--limit", "0"])
     assert exc.value.code == 2
     assert "not positive" in capsys.readouterr().err
+
+
+def test_export_output_flag_writes_json(tmp_path, monkeypatch, capsys):
+    # Issue #38: --csv as the only output flag was misleading when the
+    # format is JSON. --output does the same job with an honest name,
+    # and --csv still works as an alias.
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    out = tmp_path / "apps.json"
+    rc = main(["export", "--output", str(out), "--format", "json"])
+    assert rc == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert len(data) == 2
+    assert data[0]["company"] == "Acme"
+    assert "(json)" in capsys.readouterr().out
+
+
+def test_export_null_skill_lists_writes_blank_columns(tmp_path, monkeypatch):
+    # Issue #40: a tracked record with null skill lists (hand-edited
+    # log, or written before those fields existed) crashed export
+    # with TypeError instead of writing the row with blank columns.
+    import csv
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [{"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+              "score": 67, "status": "applied",
+              "matched_skills": None, "missing_skills": None}]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    out = tmp_path / "apps.csv"
+    assert main(["export", "--csv", str(out)]) == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert rows[1][1] == "Acme"
+    assert rows[1][5] == "" and rows[1][6] == ""
