@@ -1549,3 +1549,19 @@ def test_rank_limit_rejects_zero(capsys):
         main(["rank", "x.txt", "--limit", "0"])
     assert exc.value.code == 2
     assert "not positive" in capsys.readouterr().err
+
+
+def test_export_output_flag_writes_json(tmp_path, monkeypatch, capsys):
+    # Issue #38: --csv as the only output flag was misleading when the
+    # format is JSON. --output does the same job with an honest name,
+    # and --csv still works as an alias.
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    out = tmp_path / "apps.json"
+    rc = main(["export", "--output", str(out), "--format", "json"])
+    assert rc == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert len(data) == 2
+    assert data[0]["company"] == "Acme"
+    assert "(json)" in capsys.readouterr().out
