@@ -37,6 +37,8 @@ SKILL_TOKENS = {
     "powershell", "gradle", "maven", "helm",
     # Infra and testing tools that show up in real postings.
     "ansible", "nginx", "prometheus", "grafana", "cypress",
+    # Multi-word stack name that shows up constantly in infra postings.
+    "docker compose",
 }
 
 
@@ -69,6 +71,12 @@ SKILL_ALIASES = {
     "restful": "rest",
     "websocket": "websockets",
     "microservice": "microservices",
+    # Dotted framework spellings: the tokenizer keeps "react.js" as one
+    # token, so it never matched the bare "react" token before.
+    "react.js": "react",
+    "vue.js": "vue",
+    "angular.js": "angular",
+    "docker-compose": "docker compose",
 }
 
 
