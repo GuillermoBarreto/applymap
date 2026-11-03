@@ -37,6 +37,8 @@ SKILL_TOKENS = {
     "powershell", "gradle", "maven", "helm",
     # Infra and testing tools that show up in real postings.
     "ansible", "nginx", "prometheus", "grafana", "cypress",
+    # Multi-word stack name that shows up constantly in infra postings.
+    "docker compose",
 }
 
 
