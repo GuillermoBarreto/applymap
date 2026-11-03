@@ -340,3 +340,22 @@ def test_non_string_posting_raises_type_error():
         matcher.skill_mentions(123, ["python"])
     with pytest.raises(TypeError, match="skill must be a string"):
         matcher.canonicalize(["python"])
+
+
+def test_extract_docker_compose():
+    found = matcher.extract_required_skills(
+        "Experience with docker compose for local development.")
+    assert "docker compose" in found
+    found = matcher.extract_required_skills(
+        "We run everything with docker-compose.")
+    assert "docker compose" in found
+
+
+def test_extract_dotted_framework_spellings():
+    found = matcher.extract_required_skills(
+        "Frontend role: React.js and Vue.js experience required.")
+    assert "react" in found
+    assert "vue" in found
+    found = matcher.extract_required_skills(
+        "Angular.js maintenance work on a legacy app.")
+    assert "angular" in found
