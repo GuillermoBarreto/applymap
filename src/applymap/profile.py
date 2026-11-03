@@ -61,8 +61,13 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
             for s in _as_list(data.get("skills", []))
             if s and str(s).strip()
         ],
-        "experience": [str(e) for e in _as_list(data.get("experience", []))],
-        "target_roles": [str(r) for r in _as_list(data.get("target_roles", []))],
+        # Skills already filtered nulls; experience and target roles did
+        # not, so a bare `experience: [null]` in hand-edited YAML leaked
+        # the literal string "None" into cover letters and reports.
+        "experience": [str(e).strip() for e in _as_list(data.get("experience", []))
+                       if e is not None and str(e).strip()],
+        "target_roles": [str(r).strip() for r in _as_list(data.get("target_roles", []))
+                         if r is not None and str(r).strip()],
         "location": data.get("location", ""),
     }
     # De-duplicate skills while preserving order.
