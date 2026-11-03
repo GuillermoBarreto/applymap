@@ -71,6 +71,12 @@ SKILL_ALIASES = {
     "restful": "rest",
     "websocket": "websockets",
     "microservice": "microservices",
+    # Dotted framework spellings: the tokenizer keeps "react.js" as one
+    # token, so it never matched the bare "react" token before.
+    "react.js": "react",
+    "vue.js": "vue",
+    "angular.js": "angular",
+    "docker-compose": "docker compose",
 }
 
 
