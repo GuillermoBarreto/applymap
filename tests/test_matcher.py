@@ -254,6 +254,17 @@ def test_multiword_skill_still_matches_standalone():
     assert "spring boot" in found
 
 
+def test_phrase_skill_matches_at_sentence_end():
+    # Issue #43: the trailing dot used to block the phrase match.
+    found = matcher.extract_required_skills("Experience with spring boot.")
+    assert "spring boot" in found
+    found = matcher.extract_required_skills("We use React.js.")
+    assert "react" in found
+    # A dot followed by more token characters is not sentence end.
+    found = matcher.extract_required_skills("See spring boot.js docs.")
+    assert "spring boot" not in found
+
+
 def test_skill_mentions_counts_standalone_phrases_only():
     mentions = matcher.skill_mentions(
         "spring bootcamp spring boot spring boot", ["spring boot"]

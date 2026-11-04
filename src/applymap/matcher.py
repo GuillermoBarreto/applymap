@@ -114,9 +114,15 @@ _TOKEN_CHAR = r"[a-z0-9+#./-]"
 
 
 def _phrase_pattern(phrase: str) -> "re.Pattern":
-    """Regex matching phrase as a standalone phrase, not a substring."""
+    """Regex matching phrase as a standalone phrase, not a substring.
+
+    A trailing run of dots is sentence punctuation, not part of the
+    token: "spring boot." and "React.js." match, while a dot followed
+    by a token character ("spring boot.js", "react.jsx") still blocks
+    the match (issue #43).
+    """
     return re.compile(
-        rf"(?<!{_TOKEN_CHAR}){re.escape(phrase)}(?!{_TOKEN_CHAR})"
+        rf"(?<!{_TOKEN_CHAR}){re.escape(phrase)}(?![a-z0-9+#/-]|\.+{_TOKEN_CHAR})"
     )
 
 
