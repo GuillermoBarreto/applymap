@@ -89,7 +89,7 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         if content is None:
             raise TypeError("message content is null")
         return content.strip()
-    except (KeyError, IndexError, TypeError) as exc:
+    except (KeyError, IndexError, TypeError, AttributeError) as exc:
         raise RuntimeError(f"Unexpected API response shape: {body!r}") from exc
 
 
