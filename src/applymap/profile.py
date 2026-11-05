@@ -72,6 +72,10 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
     }
     # De-duplicate skills while preserving order.
     profile["skills"] = list(dict.fromkeys(profile["skills"]))
+    # Experience and target roles get the same treatment: a repeated line
+    # in a hand-edited profile used to repeat in cover letters and reports.
+    profile["experience"] = list(dict.fromkeys(profile["experience"]))
+    profile["target_roles"] = list(dict.fromkeys(profile["target_roles"]))
     return profile
 
 

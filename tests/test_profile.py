@@ -77,3 +77,10 @@ def test_normalize_still_wraps_bare_scalar_values():
     p = profile_mod.normalize({"skills": "Python", "experience": "did things"})
     assert p["skills"] == ["python"]
     assert p["experience"] == ["did things"]
+
+
+def test_normalize_dedupes_experience_and_target_roles():
+    p = profile_mod.normalize({"experience": ["built x", "built x", "led y"],
+                               "target_roles": ["backend", "backend"]})
+    assert p["experience"] == ["built x", "led y"]
+    assert p["target_roles"] == ["backend"]
