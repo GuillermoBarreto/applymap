@@ -170,3 +170,19 @@ def test_chat_null_content_raises_runtime_error(monkeypatch):
             assert "Unexpected API response" in str(exc)
         else:
             raise AssertionError("expected RuntimeError")
+
+
+def test_chat_non_string_content_raises_runtime_error(monkeypatch):
+    # A list (or other non-string) content used to crash on .strip() with
+    # an AttributeError instead of the "Unexpected API response" error.
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    with mock.patch(
+        "urllib.request.urlopen",
+        return_value=_FakeResponse({"choices": [{"message": {"content": ["not", "a", "string"]}}]}),
+    ):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "Unexpected API response" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
