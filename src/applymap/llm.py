@@ -15,12 +15,16 @@ from typing import Any, Dict, Optional
 
 
 def _config() -> Optional[Dict[str, str]]:
-    api_key = os.environ.get("APPLYMAP_API_KEY", "")
+    # Strip both values: a pasted key or base URL with surrounding
+    # whitespace used to slip through (a whitespace-only key even passed
+    # the "is set" check) and fail later with a confusing 401 or a
+    # malformed request URL (issue #46).
+    api_key = os.environ.get("APPLYMAP_API_KEY", "").strip()
     if not api_key:
         return None
     return {
         "api_key": api_key,
-        "base_url": os.environ.get("APPLYMAP_API_BASE", "https://api.openai.com/v1").rstrip("/"),
+        "base_url": os.environ.get("APPLYMAP_API_BASE", "https://api.openai.com/v1").strip().rstrip("/"),
         "model": os.environ.get("APPLYMAP_MODEL", "gpt-4o-mini"),
     }
 

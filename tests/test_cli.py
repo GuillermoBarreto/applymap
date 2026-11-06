@@ -742,6 +742,30 @@ def test_stats_summarizes_by_status_average_and_best_fit(tmp_path, monkeypatch, 
     assert "Best fit: Globex — SDE (82/100)" in out
 
 
+def test_stats_json_reports_totals_statuses_and_best_fit(tmp_path, monkeypatch, capsys):
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["total"] == 2
+    assert data["by_status"] == {"applied": 1, "interview": 1}
+    assert data["average_score"] == 74  # round((67 + 82) / 2)
+    assert data["best_fit"] == {"company": "Globex", "role": "SDE", "score": 82}
+
+
+def test_stats_json_empty_log_reports_zeros(tmp_path, monkeypatch, capsys):
+    import json
+
+    _seed_applications_log(tmp_path, monkeypatch).unlink()
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data == {"total": 0, "by_status": {}, "average_score": None,
+                    "best_fit": None}
+
+
 def test_parser_has_stats_subcommand():
     assert "stats" in build_parser()._subparsers._group_actions[0].choices
 

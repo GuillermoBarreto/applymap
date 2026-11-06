@@ -370,3 +370,22 @@ def test_extract_dotted_framework_spellings():
     found = matcher.extract_required_skills(
         "Angular.js maintenance work on a legacy app.")
     assert "angular" in found
+
+
+def test_extract_space_spellings_match_profile_skills():
+    # "React Native" and "Next JS" are the common spellings in real
+    # postings; they used to resolve to "react" / nothing, so a profile
+    # listing "react-native" missed those postings entirely.
+    found = matcher.extract_required_skills(
+        "We need React Native experience and a Next JS developer.")
+    assert "react-native" in found
+    assert "nextjs" in found
+    report = matcher.match(["react-native", "nextjs"], found)
+    assert report["matched"] == ["nextjs", "react-native"]
+
+
+def test_skill_mentions_counts_space_spellings():
+    posting = "React Native and React Native again, plus Next JS work."
+    mentions = matcher.skill_mentions(posting, ["react-native", "nextjs"])
+    assert mentions["react-native"] == 2
+    assert mentions["nextjs"] == 1

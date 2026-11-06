@@ -61,7 +61,11 @@ SKILL_ALIASES = {
     "ci-cd": "ci/cd",
     "open-api": "openapi",
     "ci cd": "ci/cd",
-    "github actions": "github actions",
+    # Space spellings common in real postings: "React Native" and "Next JS"
+    # used to resolve to "react" / nothing, so a profile listing
+    # "react-native" missed those postings entirely.
+    "react native": "react-native",
+    "next js": "nextjs",
     "golang": "go",
     # Fused spellings common in postings: "NodeJS developer".
     "nodejs": "node",

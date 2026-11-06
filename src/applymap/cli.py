@@ -466,9 +466,6 @@ def cmd_export(args: argparse.Namespace) -> int:
 def cmd_stats(args: argparse.Namespace) -> int:
     """Print a summary of tracked applications: totals, status counts, best fit."""
     entries = _load_applications()
-    if not entries:
-        print("No applications tracked yet. Log one with `applymap track`.")
-        return 0
     counts: dict = {}
     for e in entries:
         status = e.get("status") or "(unknown)"
@@ -477,6 +474,29 @@ def cmd_stats(args: argparse.Namespace) -> int:
         e["score"] for e in entries
         if isinstance(e.get("score"), (int, float))
     ]
+    if getattr(args, "json", False):
+        # Machine-readable form of the same summary, for scripts: the
+        # other report commands (analyze, rank, applications, export)
+        # already offer one, stats was the odd one out.
+        best = None
+        if scores:
+            top = max(
+                entries,
+                key=lambda e: e.get("score")
+                if isinstance(e.get("score"), (int, float)) else -1,
+            )
+            best = {"company": top.get("company"), "role": top.get("role"),
+                    "score": top.get("score")}
+        print(json.dumps({
+            "total": len(entries),
+            "by_status": counts,
+            "average_score": round(sum(scores) / len(scores)) if scores else None,
+            "best_fit": best,
+        }, indent=2))
+        return 0
+    if not entries:
+        print("No applications tracked yet. Log one with `applymap track`.")
+        return 0
     print(f"{len(entries)} application(s) tracked.\n")
     print("By status:")
     for status in sorted(counts):
@@ -860,6 +880,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.set_defaults(func=cmd_applications)
 
     pst = sub.add_parser("stats", help="Summarize tracked applications.")
+    pst.add_argument("--json", action="store_true",
+                     help="Print the summary as JSON.")
     pst.set_defaults(func=cmd_stats)
 
     pe = sub.add_parser("export", help="Export tracked applications to CSV or JSON.")
