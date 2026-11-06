@@ -47,7 +47,8 @@ def test_chat_returns_assistant_text(monkeypatch):
     assert result == "hello there"
     sent_req = fake.call_args[0][0]
     assert sent_req.full_url == "https://example.invalid/v1/chat/completions"
-    assert sent_req.headers["Authorization"] == "Bearer test-key"
+    assert sent_req.headers["Authorization"] == f"Bearer {llm._config()['api_key']}"
+    assert llm._config()["api_key"] == "test-key"
 
 
 def test_chat_rejects_malformed_response(monkeypatch):
@@ -186,3 +187,23 @@ def test_chat_non_string_content_raises_runtime_error(monkeypatch):
             assert "Unexpected API response" in str(exc)
         else:
             raise AssertionError("expected RuntimeError")
+
+
+def test_config_strips_whitespace_from_key_and_base(monkeypatch):
+    # A pasted key or base URL with surrounding spaces used to be sent
+    # verbatim (issue #46): the request URL came out malformed.
+    monkeypatch.setenv("APPLYMAP_API_KEY", "  test-key  ")
+    monkeypatch.setenv("APPLYMAP_API_BASE", "  https://example.invalid/v1/  ")
+    with mock.patch(
+        "urllib.request.urlopen", return_value=_FakeResponse(_api_body("hi"))
+    ) as fake:
+        llm.chat("be helpful", "hi")
+    sent_req = fake.call_args[0][0]
+    assert sent_req.full_url == "https://example.invalid/v1/chat/completions"
+    assert sent_req.headers["Authorization"] == f"Bearer {llm._config()['api_key']}"
+    assert llm._config()["api_key"] == "test-key"
+
+
+def test_whitespace_only_key_counts_as_missing(monkeypatch):
+    monkeypatch.setenv("APPLYMAP_API_KEY", "   ")
+    assert llm.is_configured() is False
