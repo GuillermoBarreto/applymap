@@ -228,3 +228,26 @@ def test_chat_non_utf8_response_raises_friendly_error(monkeypatch):
     with mock.patch("urllib.request.urlopen", return_value=_RawResponse()):
         with pytest.raises(RuntimeError, match="not valid UTF-8"):
             llm.chat("system", "user")
+
+
+def test_chat_http_error_includes_server_detail(monkeypatch):
+    """The 401 message should carry what the server actually said, so a
+    bad key and an exhausted quota don't look identical."""
+    import io
+    import urllib.error
+
+    import pytest
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    err = urllib.error.HTTPError(
+        url="https://example.invalid/v1/chat/completions",
+        code=401,
+        msg="Unauthorized",
+        hdrs={},
+        fp=io.BytesIO(b'{"error": {"message": "Incorrect API key provided"}}'),
+    )
+    with mock.patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(RuntimeError) as excinfo:
+            llm.chat("system", "user")
+    assert "Incorrect API key provided" in str(excinfo.value)
+    assert "401" in str(excinfo.value)

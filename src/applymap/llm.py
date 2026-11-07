@@ -62,9 +62,18 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
+        # Read a snippet of the error body: a 401 that only says "check
+        # your key" hides that the server actually said "Incorrect API key
+        # provided", and a quota error looks identical to a bad key — that
+        # distinction decides the user's next step.
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:200]
+        except Exception:
+            detail = ""
+        suffix = f" Server said: {detail}" if detail else ""
         raise RuntimeError(
             f"API request failed with HTTP {exc.code} "
-            f"({exc.reason}). Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
+            f"({exc.reason}).{suffix} Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
             "and your network connection."
         ) from exc
     except urllib.error.URLError as exc:
