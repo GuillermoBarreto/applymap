@@ -51,9 +51,15 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
         # a YAML list; wrap it so we never iterate over a string's characters.
         return value if isinstance(value, list) else [value]
 
+    def _as_text(value):
+        # The scalar fields used to pass through raw: a bare `name:` in
+        # hand-edited YAML is None, and the cover letter opened with
+        # "Candidate: None — ...". Coerce like the list fields do.
+        return "" if value is None else str(value).strip()
+
     profile = {
-        "name": data.get("name", ""),
-        "headline": data.get("headline", ""),
+        "name": _as_text(data.get("name", "")),
+        "headline": _as_text(data.get("headline", "")),
         # Coerce non-string skills (e.g. a bare `123` in YAML) to strings so
         # a hand-edited profile never crashes the matcher.
         "skills": [
@@ -68,7 +74,7 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
                        if e is not None and str(e).strip()],
         "target_roles": [str(r).strip() for r in _as_list(data.get("target_roles", []))
                          if r is not None and str(r).strip()],
-        "location": data.get("location", ""),
+        "location": _as_text(data.get("location", "")),
     }
     # De-duplicate skills while preserving order.
     profile["skills"] = list(dict.fromkeys(profile["skills"]))
