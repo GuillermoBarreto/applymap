@@ -79,6 +79,14 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
             f"API request failed: {exc}. Check APPLYMAP_API_BASE "
             "and your network connection."
         ) from exc
+    except UnicodeDecodeError as exc:
+        # A 200 with a non-UTF-8 body (bad proxy, misconfigured endpoint)
+        # used to escape as a raw traceback (issue #48); same class of
+        # bug as the non-JSON body handled below.
+        raise RuntimeError(
+            "API response was not valid UTF-8 text. Check APPLYMAP_API_BASE "
+            "— it may point at a non-API endpoint."
+        ) from exc
     try:
         body = json.loads(raw)
     except json.JSONDecodeError as exc:
