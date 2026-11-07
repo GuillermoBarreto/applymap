@@ -70,6 +70,14 @@ def test_normalize_treats_null_fields_as_empty():
     assert p["skills"] == []
     assert p["experience"] == []
     assert p["target_roles"] == []
+    # The scalars get the same treatment: a bare `name:` must not leak
+    # None into the cover letter, a numeric headline must become text,
+    # and a padded location must be stripped.
+    p = profile_mod.normalize({"name": None, "headline": 123,
+                               "location": "  Chicago  "})
+    assert p["name"] == ""
+    assert p["headline"] == "123"
+    assert p["location"] == "Chicago"
 
 
 def test_normalize_still_wraps_bare_scalar_values():

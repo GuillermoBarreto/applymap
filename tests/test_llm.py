@@ -207,3 +207,47 @@ def test_config_strips_whitespace_from_key_and_base(monkeypatch):
 def test_whitespace_only_key_counts_as_missing(monkeypatch):
     monkeypatch.setenv("APPLYMAP_API_KEY", "   ")
     assert llm.is_configured() is False
+
+
+def test_chat_non_utf8_response_raises_friendly_error(monkeypatch):
+    """A 200 with a non-UTF-8 body must not escape as a raw traceback (#48)."""
+    import pytest
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+
+    class _RawResponse:
+        def read(self):
+            return b"\xff\xfe not utf-8"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    with mock.patch("urllib.request.urlopen", return_value=_RawResponse()):
+        with pytest.raises(RuntimeError, match="not valid UTF-8"):
+            llm.chat("system", "user")
+
+
+def test_chat_http_error_includes_server_detail(monkeypatch):
+    """The 401 message should carry what the server actually said, so a
+    bad key and an exhausted quota don't look identical."""
+    import io
+    import urllib.error
+
+    import pytest
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    err = urllib.error.HTTPError(
+        url="https://example.invalid/v1/chat/completions",
+        code=401,
+        msg="Unauthorized",
+        hdrs={},
+        fp=io.BytesIO(b'{"error": {"message": "Incorrect API key provided"}}'),
+    )
+    with mock.patch("urllib.request.urlopen", side_effect=err):
+        with pytest.raises(RuntimeError) as excinfo:
+            llm.chat("system", "user")
+    assert "Incorrect API key provided" in str(excinfo.value)
+    assert "401" in str(excinfo.value)

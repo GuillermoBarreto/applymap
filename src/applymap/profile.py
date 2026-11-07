@@ -14,9 +14,18 @@ import yaml
 
 DEFAULT_PROFILE_PATH = Path(os.environ.get("APPLYMAP_PROFILE", "~/.applymap/profile.yaml")).expanduser()
 
+# Fields normalize() knows. Anything else in the YAML is silently
+# ignored — usually a typo, which check-profile now flags.
+KNOWN_FIELDS = {"name", "headline", "location", "target_roles", "skills", "experience"}
 
-def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
-    """Load a profile YAML file and return a normalized dict."""
+
+def unknown_fields(data: Dict[str, Any]) -> List[str]:
+    """Top-level keys normalize() doesn't know, sorted for stable output."""
+    return sorted(set(data) - KNOWN_FIELDS)
+
+
+def _read_profile_yaml(path: str | Path | None = None) -> Dict[str, Any]:
+    """Read the profile YAML mapping without normalizing it."""
     resolved = Path(path).expanduser() if path else DEFAULT_PROFILE_PATH
     if not resolved.exists():
         raise FileNotFoundError(
@@ -36,7 +45,17 @@ def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
             f"Profile at {resolved} must be a YAML mapping of profile fields, "
             f"but contains {type(data).__name__}."
         )
-    return normalize(data)
+    return data
+
+
+def load_raw_profile(path: str | Path | None = None) -> Dict[str, Any]:
+    """Load the profile YAML mapping without normalizing (for typo checks)."""
+    return _read_profile_yaml(path)
+
+
+def load_profile(path: str | Path | None = None) -> Dict[str, Any]:
+    """Load a profile YAML file and return a normalized dict."""
+    return normalize(_read_profile_yaml(path))
 
 
 def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -51,9 +70,15 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
         # a YAML list; wrap it so we never iterate over a string's characters.
         return value if isinstance(value, list) else [value]
 
+    def _as_text(value):
+        # The scalar fields used to pass through raw: a bare `name:` in
+        # hand-edited YAML is None, and the cover letter opened with
+        # "Candidate: None — ...". Coerce like the list fields do.
+        return "" if value is None else str(value).strip()
+
     profile = {
-        "name": data.get("name", ""),
-        "headline": data.get("headline", ""),
+        "name": _as_text(data.get("name", "")),
+        "headline": _as_text(data.get("headline", "")),
         # Coerce non-string skills (e.g. a bare `123` in YAML) to strings so
         # a hand-edited profile never crashes the matcher.
         "skills": [
@@ -68,7 +93,7 @@ def normalize(data: Dict[str, Any]) -> Dict[str, Any]:
                        if e is not None and str(e).strip()],
         "target_roles": [str(r).strip() for r in _as_list(data.get("target_roles", []))
                          if r is not None and str(r).strip()],
-        "location": data.get("location", ""),
+        "location": _as_text(data.get("location", "")),
     }
     # De-duplicate skills while preserving order.
     profile["skills"] = list(dict.fromkeys(profile["skills"]))

@@ -62,9 +62,18 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
+        # Read a snippet of the error body: a 401 that only says "check
+        # your key" hides that the server actually said "Incorrect API key
+        # provided", and a quota error looks identical to a bad key — that
+        # distinction decides the user's next step.
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:200]
+        except Exception:
+            detail = ""
+        suffix = f" Server said: {detail}" if detail else ""
         raise RuntimeError(
             f"API request failed with HTTP {exc.code} "
-            f"({exc.reason}). Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
+            f"({exc.reason}).{suffix} Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
             "and your network connection."
         ) from exc
     except urllib.error.URLError as exc:
@@ -78,6 +87,14 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         raise RuntimeError(
             f"API request failed: {exc}. Check APPLYMAP_API_BASE "
             "and your network connection."
+        ) from exc
+    except UnicodeDecodeError as exc:
+        # A 200 with a non-UTF-8 body (bad proxy, misconfigured endpoint)
+        # used to escape as a raw traceback (issue #48); same class of
+        # bug as the non-JSON body handled below.
+        raise RuntimeError(
+            "API response was not valid UTF-8 text. Check APPLYMAP_API_BASE "
+            "— it may point at a non-API endpoint."
         ) from exc
     try:
         body = json.loads(raw)
