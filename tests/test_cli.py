@@ -1629,3 +1629,28 @@ def test_init_profile_to_directory_is_friendly_error(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "Error:" in err
     assert "Traceback" not in err
+
+
+def test_check_profile_warns_on_unknown_fields(tmp_path, capsys):
+    import yaml
+
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "Test Dev",
+                "headline": "Software engineering student",
+                "skills": ["python"],
+                "experience": ["automated deployments"],
+                "target_roles": ["Backend Developer"],
+                "skils": ["python"],
+                "targt_roles": ["Backend Developer"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "unrecognized profile field 'skils' (did you mean 'skills'?)" in out
+    assert "unrecognized profile field 'targt_roles' (did you mean 'target_roles'?)" in out

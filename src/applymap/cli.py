@@ -744,6 +744,18 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
     """
     prof = profile_mod.load_profile(args.profile)
     warnings = []
+    # A typo'd top-level key (skils, targt_roles) used to load fine and
+    # only surface as a vague "no skills listed" warning; point at it
+    # directly, with the likely intended spelling when one is obvious.
+    for key in profile_mod.unknown_fields(profile_mod.load_raw_profile(args.profile)):
+        close = difflib.get_close_matches(
+            key, sorted(profile_mod.KNOWN_FIELDS), n=1, cutoff=0.6
+        )
+        warnings.append(
+            f"unrecognized profile field '{key}'"
+            + (f" (did you mean '{close[0]}'?)" if close else "")
+            + " — it is ignored."
+        )
     if not prof.get("name"):
         warnings.append(
             "name is empty — set it so cover letters address you correctly."
