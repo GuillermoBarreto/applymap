@@ -915,6 +915,12 @@ def main(argv: list | None = None) -> int:
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    except OSError as exc:
+        # A directory (or unwritable path) passed to init-profile or a
+        # cover-letter --output used to dump a raw traceback: IsADirectoryError
+        # and PermissionError are OSErrors but not FileNotFoundErrors.
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         # Ctrl+C during a long AI call should exit quietly, not dump a traceback.
         print(file=sys.stderr)

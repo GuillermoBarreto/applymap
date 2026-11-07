@@ -1084,10 +1084,9 @@ def test_update_status_ambiguity_lists_posting_files(tmp_path, monkeypatch, caps
     assert "--posting" in out
 
 
-def test_track_failed_write_leaves_no_partial_log(tmp_path, monkeypatch):
+def test_track_failed_write_leaves_no_partial_log(tmp_path, monkeypatch, capsys):
     """A crash during the save leaves no half-written log and no temp file."""
     import os
-    import pytest
     from applymap import cli as cli_mod
 
     monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
@@ -1097,9 +1096,12 @@ def test_track_failed_write_leaves_no_partial_log(tmp_path, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(os, "replace", boom)
-    with pytest.raises(OSError):
-        main(["track", str(posting_path), "--profile", str(profile_path),
-              "--company", "Acme", "--role", "Backend Dev"])
+    # main() reports the failed save as "Error: ..." with exit 1 instead
+    # of letting the OSError traceback escape.
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Backend Dev"])
+    assert rc == 1
+    assert "Error: disk full" in capsys.readouterr().err
     assert not (tmp_path / "applications.json").exists()
     assert list(tmp_path.glob(".applications-*.tmp")) == []
 
@@ -1615,3 +1617,15 @@ def test_export_null_skill_lists_writes_blank_columns(tmp_path, monkeypatch):
     rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
     assert rows[1][1] == "Acme"
     assert rows[1][5] == "" and rows[1][6] == ""
+
+
+def test_init_profile_to_directory_is_friendly_error(tmp_path, capsys):
+    # Pointing --path at an existing directory used to dump a raw
+    # IsADirectoryError traceback; main() now catches OSError.
+    from applymap.cli import main
+
+    rc = main(["init-profile", "--path", str(tmp_path), "--force"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Error:" in err
+    assert "Traceback" not in err
