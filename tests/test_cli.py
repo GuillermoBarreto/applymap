@@ -780,8 +780,8 @@ def test_export_writes_csv_with_header_and_rows(tmp_path, monkeypatch, capsys):
     rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
     assert rows[0] == ["date", "company", "role", "status", "score",
                        "matched_skills", "missing_skills", "posting"]
-    assert rows[1][1:5] == ["Acme", "Backend Dev", "applied", "67"]
-    assert rows[2][1:5] == ["Globex", "SDE", "interview", "82"]
+    assert rows[1][1:5] == ["Globex", "SDE", "interview", "82"]
+    assert rows[2][1:5] == ["Acme", "Backend Dev", "applied", "67"]
     assert "Wrote 2 application(s)" in capsys.readouterr().out
 
 
@@ -884,7 +884,8 @@ def test_export_json_writes_records(tmp_path, monkeypatch, capsys):
 
     data = json.loads(out.read_text(encoding="utf-8"))
     assert len(data) == 2
-    assert data[0]["company"] == "Acme"
+    assert data[0]["company"] == "Globex"  # newest first, like `applications`
+    assert data[1]["company"] == "Acme"
     assert "(json)" in capsys.readouterr().out
 
 
@@ -1589,7 +1590,8 @@ def test_export_output_flag_writes_json(tmp_path, monkeypatch, capsys):
     assert rc == 0
     data = json.loads(out.read_text(encoding="utf-8"))
     assert len(data) == 2
-    assert data[0]["company"] == "Acme"
+    assert data[0]["company"] == "Globex"  # newest first, like `applications`
+    assert data[1]["company"] == "Acme"
     assert "(json)" in capsys.readouterr().out
 
 
