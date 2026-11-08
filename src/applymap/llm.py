@@ -111,7 +111,9 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
             raise TypeError("message content is null")
         return content.strip()
     except (KeyError, IndexError, TypeError, AttributeError) as exc:
-        raise RuntimeError(f"Unexpected API response shape: {body!r}") from exc
+        # Cap the repr: a misconfigured endpoint can answer with a huge
+        # body, and printing the whole thing would flood the terminal.
+        raise RuntimeError(f"Unexpected API response shape: {body!r:.500}") from exc
 
 
 def draft_cover_letter(profile: Dict[str, Any], posting: str, company: str, role: str) -> str:

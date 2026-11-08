@@ -251,3 +251,19 @@ def test_chat_http_error_includes_server_detail(monkeypatch):
             llm.chat("system", "user")
     assert "Incorrect API key provided" in str(excinfo.value)
     assert "401" in str(excinfo.value)
+
+
+def test_chat_malformed_response_error_is_capped(monkeypatch):
+    # A misconfigured endpoint can answer with a huge body; the error
+    # should name the shape problem, not dump the whole payload.
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    with mock.patch(
+        "urllib.request.urlopen", return_value=_FakeResponse({"nope": "y" * 5000})
+    ):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "Unexpected API response" in str(exc)
+            assert len(str(exc)) < 600
+        else:
+            raise AssertionError("expected RuntimeError")
