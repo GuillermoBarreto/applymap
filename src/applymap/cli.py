@@ -431,6 +431,10 @@ def cmd_export(args: argparse.Namespace) -> int:
     entries = _load_applications()
     if args.status:
         entries = [e for e in entries if e.get("status") == args.status]
+    # Newest first, same as `applications` prints and `applications --json`
+    # returns: the export used to come back in raw insertion order, which
+    # disagreed with both (issue #36).
+    entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
     # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
     # literal "~" directory; create missing parent folders too.
     out = Path(args.csv).expanduser()
