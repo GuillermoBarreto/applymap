@@ -25,7 +25,10 @@ def _config() -> Optional[Dict[str, str]]:
     return {
         "api_key": api_key,
         "base_url": os.environ.get("APPLYMAP_API_BASE", "https://api.openai.com/v1").strip().rstrip("/"),
-        "model": os.environ.get("APPLYMAP_MODEL", "gpt-4o-mini"),
+        # The key and base URL are stripped (issue #46); the model was
+        # not, so a pasted model name with trailing whitespace 404'd as
+        # an unknown model. A blank value falls back to the default.
+        "model": os.environ.get("APPLYMAP_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
     }
 
 
@@ -65,9 +68,11 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         # Read a snippet of the error body: a 401 that only says "check
         # your key" hides that the server actually said "Incorrect API key
         # provided", and a quota error looks identical to a bad key — that
-        # distinction decides the user's next step.
+        # distinction decides the user's next step. Read at most 512 bytes:
+        # a huge error page used to be downloaded and decoded in full
+        # before the slice to 200 characters.
         try:
-            detail = exc.read().decode("utf-8", "replace")[:200]
+            detail = exc.read(512).decode("utf-8", "replace")[:200]
         except Exception:
             detail = ""
         suffix = f" Server said: {detail}" if detail else ""
