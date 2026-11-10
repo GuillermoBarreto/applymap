@@ -25,7 +25,10 @@ def _config() -> Optional[Dict[str, str]]:
     return {
         "api_key": api_key,
         "base_url": os.environ.get("APPLYMAP_API_BASE", "https://api.openai.com/v1").strip().rstrip("/"),
-        "model": os.environ.get("APPLYMAP_MODEL", "gpt-4o-mini"),
+        # The key and base URL are stripped (issue #46); the model was
+        # not, so a pasted model name with trailing whitespace 404'd as
+        # an unknown model. A blank value falls back to the default.
+        "model": os.environ.get("APPLYMAP_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
     }
 
 

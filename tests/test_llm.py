@@ -37,6 +37,17 @@ def test_chat_requires_key(monkeypatch):
         raise AssertionError("expected RuntimeError")
 
 
+def test_config_strips_model_whitespace(monkeypatch):
+    # A pasted APPLYMAP_MODEL with surrounding whitespace used to reach
+    # the API verbatim and 404 as an unknown model; the key and base URL
+    # are already stripped (issue #46).
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setenv("APPLYMAP_MODEL", "  gpt-4o-mini  ")
+    assert llm._config()["model"] == "gpt-4o-mini"
+    monkeypatch.setenv("APPLYMAP_MODEL", "   ")
+    assert llm._config()["model"] == "gpt-4o-mini"
+
+
 def test_chat_returns_assistant_text(monkeypatch):
     monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
     monkeypatch.setenv("APPLYMAP_API_BASE", "https://example.invalid/v1")
