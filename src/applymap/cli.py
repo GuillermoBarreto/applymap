@@ -311,6 +311,9 @@ def cmd_track(args: argparse.Namespace) -> int:
         "score": report["score"],
         "matched_skills": report["matched"],
         "missing_skills": report["missing"],
+        # Free-text note (recruiter name, referral, deadline): shown in
+        # `applications` and exported, so the context stays with the record.
+        "notes": args.notes or "",
         "status": args.status,
     }
     TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -420,8 +423,11 @@ def cmd_applications(args: argparse.Namespace) -> int:
         # it was tracked (issue #10) — "n/a", never "None/100".
         score = e.get("score")
         score_txt = f"{score}/100" if isinstance(score, (int, float)) else "n/a"
-        print(f"{e.get('date', '?')}  {score_txt}  "
-              f"{company} — {role}  [{e.get('status', '?')}]")
+        line = (f"{e.get('date', '?')}  {score_txt}  "
+                f"{company} — {role}  [{e.get('status', '?')}]")
+        if e.get("notes"):
+            line += f"  — {e['notes']}"
+        print(line)
     print(f"\n{len(entries)} application(s) tracked.")
     return 0
 
@@ -446,7 +452,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             writer = csv.writer(fh)
             writer.writerow([
                 "date", "company", "role", "status", "score",
-                "matched_skills", "missing_skills", "posting",
+                "matched_skills", "missing_skills", "posting", "notes",
             ])
             for e in entries:
                 writer.writerow([
@@ -462,6 +468,9 @@ def cmd_export(args: argparse.Namespace) -> int:
                     "; ".join(e.get("matched_skills") or []),
                     "; ".join(e.get("missing_skills") or []),
                     e.get("posting", ""),
+                    # Records tracked before --notes existed have no notes
+                    # field; export an empty cell, not the literal "None".
+                    e.get("notes", ""),
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
@@ -876,6 +885,9 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--date", default=None, metavar="YYYY-MM-DD",
                     help="Log the application under this date (default: today); "
                          "use when backfilling applications you sent earlier.")
+    pt.add_argument("--notes", default="", metavar="TEXT",
+                    help="Free-text note stored with the record (recruiter name, "
+                         "referral, deadline); shown by `applications` and exported.")
     pt.set_defaults(func=cmd_track)
 
     pu = sub.add_parser("update-status", help="Change a tracked application's status.")

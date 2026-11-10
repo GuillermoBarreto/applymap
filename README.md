@@ -74,6 +74,9 @@ applymap track posting-a.txt --company "Acme" --role "Backend Engineer"
 `track` records the date, company, role, fit score, and status
 (`interested`/`applied`/`interview`/`offer`/`rejected`) in
 `~/.applymap/applications.json` — one JSON list you can open in any editor.
+Pass `--notes "referred by Dana"` to keep a free-text note with the record
+(recruiter name, referral, deadline); it shows in `applications` and in
+exports.
 Set `APPLYMAP_DATA_DIR` to move it elsewhere. When a posting contains no
 recognizable tech skills, `track` warns you instead of silently logging a
 meaningless 0/100. Backfilling applications you sent before you started
