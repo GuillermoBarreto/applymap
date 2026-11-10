@@ -989,6 +989,46 @@ def test_parser_has_followup_subcommand():
     assert args.days == 14
 
 
+def test_followup_json_reports_stale_applications(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    old = (today - datetime.timedelta(days=45)).isoformat()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": old, "company": "StaleCo", "role": "Dev", "score": 80, "status": "applied"},
+                {"date": old, "company": "OfferCo", "role": "Dev", "score": 90, "status": "offer"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--json"])
+    assert rc == 0
+    # Pure JSON on stdout: nothing before the array, so scripts can pipe it.
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed == [
+        {"days_waiting": 45, "date": old, "company": "StaleCo",
+         "role": "Dev", "status": "applied"}
+    ]
+
+
+def test_followup_json_empty_log_reports_empty_list(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
 def test_rank_disambiguates_identical_stems(tmp_path, monkeypatch, capsys):
     import os
     from applymap import cli as cli_mod

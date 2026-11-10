@@ -665,10 +665,20 @@ def cmd_followup(args: argparse.Namespace) -> int:
         waiting = (today - logged).days
         if waiting >= args.days:
             stale.append((waiting, e))
+    stale.sort(key=lambda pair: pair[0], reverse=True)  # longest waiting first
+    if getattr(args, "json", False):
+        # Machine-readable form of the same list, for scripts: the other
+        # report commands (analyze, rank, applications, stats) already
+        # offer one, followup was the odd one out.
+        print(json.dumps([
+            {"days_waiting": waiting, "date": e.get("date"),
+             "company": e.get("company"), "role": e.get("role"),
+             "status": e.get("status")}
+            for waiting, e in stale], indent=2))
+        return 0
     if not stale:
         print(f"No applications waiting {args.days}+ days. All caught up.")
         return 0
-    stale.sort(key=lambda pair: pair[0], reverse=True)  # longest waiting first
     print(f"{len(stale)} application(s) waiting {args.days}+ days — "
           f"time to follow up:\n")
     for waiting, e in stale:
@@ -916,6 +926,8 @@ def build_parser() -> argparse.ArgumentParser:
     pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
     pf.add_argument("--days", type=_days_type, default=30, metavar="N",
                     help="Flag applications in 'applied' or 'interview' status for at least N days (default: 30).")
+    pf.add_argument("--json", action="store_true",
+                    help="Print the stale applications as JSON instead of text.")
     pf.set_defaults(func=cmd_followup)
 
     return p
