@@ -264,6 +264,32 @@ def test_chat_http_error_includes_server_detail(monkeypatch):
     assert "401" in str(excinfo.value)
 
 
+def test_chat_http_error_body_read_is_capped(monkeypatch):
+    # A misconfigured endpoint can answer an error with a huge body; only
+    # the first bytes are read, and the raised message stays short.
+    import io
+    import urllib.error
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    body = b'{"error": "x"}' + b"y" * 100000
+    err = urllib.error.HTTPError(
+        url="https://example.invalid/v1/chat/completions",
+        code=401,
+        msg="Unauthorized",
+        hdrs={},
+        fp=io.BytesIO(body),
+    )
+    with mock.patch("urllib.request.urlopen", side_effect=err):
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert len(str(exc)) < 1000
+            assert "401" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+    assert err.fp.tell() <= 512
+
+
 def test_chat_malformed_response_error_is_capped(monkeypatch):
     # A misconfigured endpoint can answer with a huge body; the error
     # should name the shape problem, not dump the whole payload.
