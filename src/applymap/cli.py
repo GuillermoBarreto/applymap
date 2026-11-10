@@ -311,6 +311,9 @@ def cmd_track(args: argparse.Namespace) -> int:
         "score": report["score"],
         "matched_skills": report["matched"],
         "missing_skills": report["missing"],
+        # Free-text note (recruiter name, referral, deadline): shown in
+        # `applications` and exported, so the context stays with the record.
+        "notes": args.notes or "",
         "status": args.status,
     }
     TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -420,8 +423,11 @@ def cmd_applications(args: argparse.Namespace) -> int:
         # it was tracked (issue #10) — "n/a", never "None/100".
         score = e.get("score")
         score_txt = f"{score}/100" if isinstance(score, (int, float)) else "n/a"
-        print(f"{e.get('date', '?')}  {score_txt}  "
-              f"{company} — {role}  [{e.get('status', '?')}]")
+        line = (f"{e.get('date', '?')}  {score_txt}  "
+                f"{company} — {role}  [{e.get('status', '?')}]")
+        if e.get("notes"):
+            line += f"  — {e['notes']}"
+        print(line)
     print(f"\n{len(entries)} application(s) tracked.")
     return 0
 
@@ -446,7 +452,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             writer = csv.writer(fh)
             writer.writerow([
                 "date", "company", "role", "status", "score",
-                "matched_skills", "missing_skills", "posting",
+                "matched_skills", "missing_skills", "posting", "notes",
             ])
             for e in entries:
                 writer.writerow([
@@ -462,6 +468,9 @@ def cmd_export(args: argparse.Namespace) -> int:
                     "; ".join(e.get("matched_skills") or []),
                     "; ".join(e.get("missing_skills") or []),
                     e.get("posting", ""),
+                    # Records tracked before --notes existed have no notes
+                    # field; export an empty cell, not the literal "None".
+                    e.get("notes", ""),
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
@@ -665,10 +674,20 @@ def cmd_followup(args: argparse.Namespace) -> int:
         waiting = (today - logged).days
         if waiting >= args.days:
             stale.append((waiting, e))
+    stale.sort(key=lambda pair: pair[0], reverse=True)  # longest waiting first
+    if getattr(args, "json", False):
+        # Machine-readable form of the same list, for scripts: the other
+        # report commands (analyze, rank, applications, stats) already
+        # offer one, followup was the odd one out.
+        print(json.dumps([
+            {"days_waiting": waiting, "date": e.get("date"),
+             "company": e.get("company"), "role": e.get("role"),
+             "status": e.get("status")}
+            for waiting, e in stale], indent=2))
+        return 0
     if not stale:
         print(f"No applications waiting {args.days}+ days. All caught up.")
         return 0
-    stale.sort(key=lambda pair: pair[0], reverse=True)  # longest waiting first
     print(f"{len(stale)} application(s) waiting {args.days}+ days — "
           f"time to follow up:\n")
     for waiting, e in stale:
@@ -866,6 +885,9 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--date", default=None, metavar="YYYY-MM-DD",
                     help="Log the application under this date (default: today); "
                          "use when backfilling applications you sent earlier.")
+    pt.add_argument("--notes", default="", metavar="TEXT",
+                    help="Free-text note stored with the record (recruiter name, "
+                         "referral, deadline); shown by `applications` and exported.")
     pt.set_defaults(func=cmd_track)
 
     pu = sub.add_parser("update-status", help="Change a tracked application's status.")
@@ -916,6 +938,8 @@ def build_parser() -> argparse.ArgumentParser:
     pf = sub.add_parser("followup", help="Find applications waiting too long for a response.")
     pf.add_argument("--days", type=_days_type, default=30, metavar="N",
                     help="Flag applications in 'applied' or 'interview' status for at least N days (default: 30).")
+    pf.add_argument("--json", action="store_true",
+                    help="Print the stale applications as JSON instead of text.")
     pf.set_defaults(func=cmd_followup)
 
     return p

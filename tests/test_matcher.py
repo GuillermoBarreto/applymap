@@ -91,6 +91,19 @@ def test_extract_golang_alias_resolves_to_go():
     assert "golang" not in found
 
 
+def test_extract_dotted_and_fused_framework_spellings():
+    # "Express.js" and "TailwindCSS" are single tokens to the tokenizer,
+    # so the bare "express"/"tailwind" tokens never matched them before.
+    found = matcher.extract_required_skills(
+        "Express.js API with TailwindCSS styling, tailwind-css a plus."
+    )
+    assert "express" in found
+    assert "tailwind" in found
+    assert "express.js" not in found
+    assert "tailwindcss" not in found
+    assert "tailwind-css" not in found
+
+
 def test_canonicalize_unknown_passes_through():
     assert matcher.canonicalize("  Python ") == "python"
     assert matcher.canonicalize("cobol") == "cobol"

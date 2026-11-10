@@ -183,6 +183,34 @@ def test_track_appends_to_existing_log(tmp_path, monkeypatch):
     assert len(entries) == 2
 
 
+def test_track_stores_notes_and_applications_shows_them(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(
+        [
+            "track",
+            str(posting_path),
+            "--profile",
+            str(profile_path),
+            "--company",
+            "Acme",
+            "--role",
+            "Backend Dev",
+            "--notes",
+            "referred by Dana",
+        ]
+    )
+    assert rc == 0
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert entries[0]["notes"] == "referred by Dana"
+    rc = main(["applications"])
+    assert rc == 0
+    assert "referred by Dana" in capsys.readouterr().out
+
+
 def test_parser_has_track_subcommand():
     from applymap.cli import build_parser
 
@@ -779,9 +807,11 @@ def test_export_writes_csv_with_header_and_rows(tmp_path, monkeypatch, capsys):
     assert rc == 0
     rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
     assert rows[0] == ["date", "company", "role", "status", "score",
-                       "matched_skills", "missing_skills", "posting"]
+                       "matched_skills", "missing_skills", "posting", "notes"]
     assert rows[1][1:5] == ["Globex", "SDE", "interview", "82"]
     assert rows[2][1:5] == ["Acme", "Backend Dev", "applied", "67"]
+    # Records seeded before --notes existed have no notes field: empty cell.
+    assert rows[1][-1] == "" and rows[2][-1] == ""
     assert "Wrote 2 application(s)" in capsys.readouterr().out
 
 
@@ -987,6 +1017,46 @@ def test_parser_has_followup_subcommand():
     args = parser.parse_args(["followup", "--days", "14"])
     assert args.command == "followup"
     assert args.days == 14
+
+
+def test_followup_json_reports_stale_applications(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    old = (today - datetime.timedelta(days=45)).isoformat()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": old, "company": "StaleCo", "role": "Dev", "score": 80, "status": "applied"},
+                {"date": old, "company": "OfferCo", "role": "Dev", "score": 90, "status": "offer"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--json"])
+    assert rc == 0
+    # Pure JSON on stdout: nothing before the array, so scripts can pipe it.
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed == [
+        {"days_waiting": 45, "date": old, "company": "StaleCo",
+         "role": "Dev", "status": "applied"}
+    ]
+
+
+def test_followup_json_empty_log_reports_empty_list(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
 
 
 def test_rank_disambiguates_identical_stems(tmp_path, monkeypatch, capsys):

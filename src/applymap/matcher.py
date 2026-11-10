@@ -80,7 +80,12 @@ SKILL_ALIASES = {
     "react.js": "react",
     "vue.js": "vue",
     "angular.js": "angular",
+    "express.js": "express",
     "docker-compose": "docker compose",
+    # Fused framework spellings: "TailwindCSS" in a posting is one token,
+    # so the bare "tailwind" token never matched it.
+    "tailwindcss": "tailwind",
+    "tailwind-css": "tailwind",
 }
 
 
