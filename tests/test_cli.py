@@ -552,6 +552,42 @@ def test_rank_json_respects_min_score(tmp_path, capsys):
     assert [r["label"] for r in ranked] == ["good"]
 
 
+def test_rank_json_reports_hidden_counts(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    good = tmp_path / "good.txt"
+    good.write_text("Python and SQL developer.", encoding="utf-8")
+    bad = tmp_path / "bad.txt"
+    bad.write_text("Rust and Kubernetes engineer.", encoding="utf-8")
+    rc = main(["rank", str(good), str(bad), "--profile", str(profile_path),
+               "--json", "--min-score", "50"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    ranked = json.loads(captured.out)
+    assert [r["label"] for r in ranked] == ["good"]
+    assert "1 posting(s) below --min-score 50 hidden" in captured.err
+
+
+def test_rank_json_reports_limited_counts(tmp_path, capsys):
+    import json
+
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    first = tmp_path / "first.txt"
+    first.write_text("Python and SQL developer.", encoding="utf-8")
+    second = tmp_path / "second.txt"
+    second.write_text("Python developer.", encoding="utf-8")
+    third = tmp_path / "third.txt"
+    third.write_text("Python and Docker developer.", encoding="utf-8")
+    rc = main(["rank", str(first), str(second), str(third),
+               "--profile", str(profile_path), "--json", "--limit", "1"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    ranked = json.loads(captured.out)
+    assert len(ranked) == 1
+    assert "2 posting(s) below --limit 1 hidden" in captured.err
+
+
 def _write_sparse_profile(tmp_path, **overrides):
     import yaml
 

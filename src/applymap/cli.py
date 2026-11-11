@@ -191,6 +191,16 @@ def cmd_rank(args: argparse.Namespace) -> int:
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps(ranked, indent=2))
+        # The hidden/limited counts that text mode prints after the rows
+        # never made it into --json output (issue #53): a scripted run
+        # silently lost postings. They go to stderr so the JSON on
+        # stdout stays parseable, same rule as the CSV notice below.
+        if hidden:
+            print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)",
+                  file=sys.stderr)
+        if limited:
+            print(f"({len(limited)} posting(s) below --limit {args.limit} hidden)",
+                  file=sys.stderr)
     else:
         for r in ranked:
             score_txt = (f"{r['score']:>3}/100"
