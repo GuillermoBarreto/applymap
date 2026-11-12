@@ -590,7 +590,12 @@ def _find_application_indexes(
             continue
         if selector is not None:
             stored = entry.get("posting") or ""
-            if not (stored == selector or Path(stored).name == selector):
+            # _posting_key resolves a stored relative path the way
+            # _already_tracked does: entries logged before absolute-path
+            # storage keep "posting.txt", which only matches once both
+            # spellings are resolved against the current directory.
+            if not (stored == selector or Path(stored).name == selector
+                    or _posting_key(stored) == selector):
                 continue
         matched.append(i)
     return matched
@@ -692,7 +697,8 @@ def cmd_followup(args: argparse.Namespace) -> int:
         print(json.dumps([
             {"days_waiting": waiting, "date": e.get("date"),
              "company": e.get("company"), "role": e.get("role"),
-             "status": e.get("status")}
+             "status": e.get("status"), "notes": e.get("notes"),
+             "posting": e.get("posting")}
             for waiting, e in stale], indent=2))
         return 0
     if not stale:
