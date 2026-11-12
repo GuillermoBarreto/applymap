@@ -1079,7 +1079,40 @@ def test_followup_json_reports_stale_applications(tmp_path, monkeypatch, capsys)
     parsed = json.loads(capsys.readouterr().out)
     assert parsed == [
         {"days_waiting": 45, "date": old, "company": "StaleCo",
-         "role": "Dev", "status": "applied"}
+         "role": "Dev", "status": "applied", "notes": None, "posting": None}
+    ]
+
+
+def test_followup_json_includes_notes_and_posting(tmp_path, monkeypatch, capsys):
+    """The follow-up decision needs the note (who to contact, deadline)
+    and the posting file, so --json carries both instead of dropping them."""
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    old = (today - datetime.timedelta(days=45)).isoformat()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": old, "company": "StaleCo", "role": "Dev", "score": 80,
+                 "status": "applied",
+                 "notes": "Recruiter: Dana, deadline Nov 20",
+                 "posting": "postings/staleco-dev.txt"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup", "--json"])
+    assert rc == 0
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed == [
+        {"days_waiting": 45, "date": old, "company": "StaleCo",
+         "role": "Dev", "status": "applied",
+         "notes": "Recruiter: Dana, deadline Nov 20",
+         "posting": "postings/staleco-dev.txt"}
     ]
 
 

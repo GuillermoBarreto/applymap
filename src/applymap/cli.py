@@ -697,7 +697,8 @@ def cmd_followup(args: argparse.Namespace) -> int:
         print(json.dumps([
             {"days_waiting": waiting, "date": e.get("date"),
              "company": e.get("company"), "role": e.get("role"),
-             "status": e.get("status")}
+             "status": e.get("status"), "notes": e.get("notes"),
+             "posting": e.get("posting")}
             for waiting, e in stale], indent=2))
         return 0
     if not stale:
