@@ -590,7 +590,12 @@ def _find_application_indexes(
             continue
         if selector is not None:
             stored = entry.get("posting") or ""
-            if not (stored == selector or Path(stored).name == selector):
+            # _posting_key resolves a stored relative path the way
+            # _already_tracked does: entries logged before absolute-path
+            # storage keep "posting.txt", which only matches once both
+            # spellings are resolved against the current directory.
+            if not (stored == selector or Path(stored).name == selector
+                    or _posting_key(stored) == selector):
                 continue
         matched.append(i)
     return matched

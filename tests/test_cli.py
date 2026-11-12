@@ -1170,6 +1170,33 @@ def test_update_status_posting_accepts_bare_filename(tmp_path, monkeypatch):
     assert entries[1]["status"] == "applied"
 
 
+def test_update_status_posting_matches_old_relative_path(tmp_path, monkeypatch):
+    """An entry logged before absolute-path storage kept a relative
+    posting string; update-status --posting the same file must still
+    find it, the way track's duplicate check already does."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    monkeypatch.chdir(tmp_path)
+    _write_profile_and_posting(tmp_path)
+    (tmp_path / "applications.json").write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme",
+                 "role": "Backend Dev", "posting": "posting.txt",
+                 "score": 67, "status": "applied"}
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview", "--posting", "posting.txt"])
+    assert rc == 0
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert entries[0]["status"] == "interview"
+
+
 def test_update_status_posting_no_match_is_friendly_error(tmp_path, monkeypatch, capsys):
     _seed_duplicate_company_role_log(tmp_path, monkeypatch)
     rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
