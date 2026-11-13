@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
@@ -37,6 +38,17 @@ def is_configured() -> bool:
     return _config() is not None
 
 
+def _retry_delay_seconds(exc: urllib.error.HTTPError) -> float:
+    """Wait before retrying a 429/5xx, honoring Retry-After when the
+    server sent one. Capped so a bad header can't stall the CLI."""
+    headers = getattr(exc, "headers", None) or {}
+    try:
+        delay = float(headers.get("Retry-After", 1.0))
+    except (AttributeError, TypeError, ValueError):
+        return 1.0
+    return min(max(delay, 0.0), 10.0)
+
+
 def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
     """Send one chat-completion request and return the assistant text."""
     cfg = _config()
@@ -61,46 +73,56 @@ def chat(system: str, user: str, *, max_tokens: int = 800) -> str:
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            raw = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        # Read a snippet of the error body: a 401 that only says "check
-        # your key" hides that the server actually said "Incorrect API key
-        # provided", and a quota error looks identical to a bad key — that
-        # distinction decides the user's next step. Read at most 512 bytes:
-        # a huge error page used to be downloaded and decoded in full
-        # before the slice to 200 characters.
+    raw = None
+    for attempt in range(2):
         try:
-            detail = exc.read(512).decode("utf-8", "replace")[:200]
-        except Exception:
-            detail = ""
-        suffix = f" Server said: {detail}" if detail else ""
-        raise RuntimeError(
-            f"API request failed with HTTP {exc.code} "
-            f"({exc.reason}).{suffix} Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
-            "and your network connection."
-        ) from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(
-            f"API request failed: {exc.reason}. Check APPLYMAP_API_BASE "
-            "and your network connection."
-        ) from exc
-    except (TimeoutError, OSError) as exc:
-        # urlopen can surface bare socket timeouts / OS-level network
-        # errors that are not wrapped in URLError.
-        raise RuntimeError(
-            f"API request failed: {exc}. Check APPLYMAP_API_BASE "
-            "and your network connection."
-        ) from exc
-    except UnicodeDecodeError as exc:
-        # A 200 with a non-UTF-8 body (bad proxy, misconfigured endpoint)
-        # used to escape as a raw traceback (issue #48); same class of
-        # bug as the non-JSON body handled below.
-        raise RuntimeError(
-            "API response was not valid UTF-8 text. Check APPLYMAP_API_BASE "
-            "— it may point at a non-API endpoint."
-        ) from exc
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                raw = resp.read().decode("utf-8")
+            break
+        except urllib.error.HTTPError as exc:
+            # A 429 or 5xx is usually momentary (rate limit, blip): retry
+            # once after a short wait instead of wasting the command
+            # (issue #57). Anything else (bad key, unknown model) fails
+            # right away — retrying those never helps.
+            if attempt == 0 and (exc.code == 429 or exc.code >= 500):
+                time.sleep(_retry_delay_seconds(exc))
+                continue
+            # Read a snippet of the error body: a 401 that only says "check
+            # your key" hides that the server actually said "Incorrect API key
+            # provided", and a quota error looks identical to a bad key — that
+            # distinction decides the user's next step. Read at most 512 bytes:
+            # a huge error page used to be downloaded and decoded in full
+            # before the slice to 200 characters.
+            try:
+                detail = exc.read(512).decode("utf-8", "replace")[:200]
+            except Exception:
+                detail = ""
+            suffix = f" Server said: {detail}" if detail else ""
+            raise RuntimeError(
+                f"API request failed with HTTP {exc.code} "
+                f"({exc.reason}).{suffix} Check APPLYMAP_API_KEY, APPLYMAP_API_BASE, "
+                "and your network connection."
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"API request failed: {exc.reason}. Check APPLYMAP_API_BASE "
+                "and your network connection."
+            ) from exc
+        except (TimeoutError, OSError) as exc:
+            # urlopen can surface bare socket timeouts / OS-level network
+            # errors that are not wrapped in URLError.
+            raise RuntimeError(
+                f"API request failed: {exc}. Check APPLYMAP_API_BASE "
+                "and your network connection."
+            ) from exc
+        except UnicodeDecodeError as exc:
+            # A 200 with a non-UTF-8 body (bad proxy, misconfigured endpoint)
+            # used to escape as a raw traceback (issue #48); same class of
+            # bug as the non-JSON body handled below.
+            raise RuntimeError(
+                "API response was not valid UTF-8 text. Check APPLYMAP_API_BASE "
+                "— it may point at a non-API endpoint."
+            ) from exc
     try:
         body = json.loads(raw)
     except json.JSONDecodeError as exc:

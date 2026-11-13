@@ -304,3 +304,78 @@ def test_chat_malformed_response_error_is_capped(monkeypatch):
             assert len(str(exc)) < 600
         else:
             raise AssertionError("expected RuntimeError")
+
+
+def _http_error(code, msg, retry_after=None):
+    import io
+    import urllib.error
+
+    hdrs = {"Retry-After": retry_after} if retry_after is not None else {}
+    return urllib.error.HTTPError(
+        url="https://example.invalid/v1/chat/completions",
+        code=code,
+        msg=msg,
+        hdrs=hdrs,
+        fp=io.BytesIO(b"{}"),
+    )
+
+
+def test_chat_retries_once_on_429_then_succeeds(monkeypatch):
+    """A momentary rate limit should not waste the command (issue #57)."""
+    import time
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    err = _http_error(429, "Too Many Requests", retry_after="0")
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=[err, _FakeResponse(_api_body("after retry"))],
+    ) as fake:
+        assert llm.chat("be helpful", "hi") == "after retry"
+    assert fake.call_count == 2
+
+
+def test_chat_retries_once_on_503_then_succeeds(monkeypatch):
+    import time
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    err = _http_error(503, "Service Unavailable", retry_after="0")
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=[err, _FakeResponse(_api_body("back up"))],
+    ) as fake:
+        assert llm.chat("be helpful", "hi") == "back up"
+    assert fake.call_count == 2
+
+
+def test_chat_still_fails_after_second_429(monkeypatch):
+    """Only one retry: a persistent rate limit still surfaces as an error."""
+    import time
+
+    import pytest
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    errs = [
+        _http_error(429, "Too Many Requests", retry_after="0"),
+        _http_error(429, "Too Many Requests", retry_after="0"),
+    ]
+    with mock.patch("urllib.request.urlopen", side_effect=errs) as fake:
+        with pytest.raises(RuntimeError, match="429"):
+            llm.chat("be helpful", "hi")
+    assert fake.call_count == 2
+
+
+def test_chat_does_not_retry_401(monkeypatch):
+    """A bad key never gets better on retry — fail immediately (issue #57)."""
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    err = _http_error(401, "Unauthorized")
+    with mock.patch("urllib.request.urlopen", side_effect=err) as fake:
+        try:
+            llm.chat("system", "user")
+        except RuntimeError as exc:
+            assert "401" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError")
+    assert fake.call_count == 1
