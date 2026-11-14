@@ -423,6 +423,14 @@ def _load_applications() -> list:
             f"Applications log at {TRACKING_PATH} is not valid JSON. "
             "Fix or remove the file, then try again."
         )
+    except OSError as exc:
+        # A directory (or unreadable path) at the log location used to
+        # surface as a raw "[Errno 21] Is a directory" message; name the
+        # file and the fix like the corrupt-JSON case above.
+        raise RuntimeError(
+            f"Cannot read applications log at {TRACKING_PATH}: "
+            f"{exc.strerror or exc}. Fix or remove the file, then try again."
+        ) from exc
     if not isinstance(entries, list):
         raise RuntimeError(
             f"Applications log at {TRACKING_PATH} should be a JSON list of "

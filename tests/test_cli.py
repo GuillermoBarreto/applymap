@@ -1914,3 +1914,17 @@ def test_applications_no_flag_when_posting_unchanged(tmp_path, monkeypatch, caps
     assert main(["applications", "--json"]) == 0
     entries = json.loads(capsys.readouterr().out)
     assert entries[0]["posting_changed"] is False
+
+
+def test_applications_log_is_a_directory_is_friendly_error(tmp_path, monkeypatch, capsys):
+    """A directory sitting at the applications log path used to surface
+    as a raw "[Errno 21] Is a directory" message."""
+    from applymap import cli as cli_mod
+
+    log_dir = tmp_path / "applications.json"
+    log_dir.mkdir()
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log_dir)
+    assert main(["applications"]) == 1
+    err = capsys.readouterr().err
+    assert "Cannot read applications log" in err
+    assert "Fix or remove the file" in err
