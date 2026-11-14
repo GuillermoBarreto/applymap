@@ -6,6 +6,7 @@ import argparse
 import csv
 import datetime
 import difflib
+import hashlib
 import json
 import os
 import sys
@@ -318,6 +319,10 @@ def cmd_track(args: argparse.Namespace) -> int:
         "company": args.company or "",
         "role": args.role or "",
         "posting": posting_path,
+        # Content hash of the posting text: two different postings that
+        # share a filename are not the same application (issue #54), so
+        # the dedup check compares content, not just the filename.
+        "posting_sha256": hashlib.sha256(posting.encode("utf-8")).hexdigest(),
         "score": report["score"],
         "matched_skills": report["matched"],
         "missing_skills": report["missing"],
@@ -328,7 +333,8 @@ def cmd_track(args: argparse.Namespace) -> int:
     }
     TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
     entries = _load_applications()  # friendly error on corrupted log, not a traceback
-    if _already_tracked(entries, posting_path, args.company or "", args.role or ""):
+    if _already_tracked(entries, posting_path, args.company or "",
+                        args.role or "", record["posting_sha256"]):
         return 0
     entries.append(record)
     _save_applications(entries)
@@ -360,16 +366,34 @@ def _posting_key(value: str) -> str:
     return str(Path(value or "").expanduser().resolve())
 
 
-def _already_tracked(entries: list, posting_path: str, company: str, role: str) -> bool:
-    """True when this exact application is already logged; warns the user."""
+def _already_tracked(entries: list, posting_path: str, company: str, role: str,
+                     posting_sha256: str | None = None) -> bool:
+    """True when this exact application is already logged; warns the user.
+
+    The same file (resolved path) with the same company/role is a
+    duplicate. A different file that merely shares the filename is not:
+    it only counts as the same posting when the content hash matches
+    too (issue #54). Records logged before hashes existed carry none,
+    so a bare-name match against one keeps the old rule — there is no
+    content to compare, and the file may live on another machine.
+    """
     company, role = _norm_identity(company), _norm_identity(role)
     base = Path(posting_path).name
     for entry in entries:
         stored = entry.get("posting") or ""
-        # The bare-name fallback covers entries logged from a different
-        # directory, where no absolute spelling can ever match.
-        if (_posting_key(stored) != posting_path
-                and Path(stored).name != base):
+        if _posting_key(stored) == posting_path:
+            same_file = True
+        elif Path(stored).name == base:
+            # The bare-name fallback covers entries logged from a different
+            # directory, where no absolute spelling can ever match.
+            stored_sha = entry.get("posting_sha256")
+            if stored_sha is None or posting_sha256 is None:
+                same_file = True
+            else:
+                same_file = stored_sha == posting_sha256
+        else:
+            continue
+        if not same_file:
             continue
         if (_norm_identity(entry.get("company")) == company
                 and _norm_identity(entry.get("role")) == role):
@@ -399,12 +423,37 @@ def _load_applications() -> list:
             f"Applications log at {TRACKING_PATH} is not valid JSON. "
             "Fix or remove the file, then try again."
         )
+    except OSError as exc:
+        # A directory (or unreadable path) at the log location used to
+        # surface as a raw "[Errno 21] Is a directory" message; name the
+        # file and the fix like the corrupt-JSON case above.
+        raise RuntimeError(
+            f"Cannot read applications log at {TRACKING_PATH}: "
+            f"{exc.strerror or exc}. Fix or remove the file, then try again."
+        ) from exc
     if not isinstance(entries, list):
         raise RuntimeError(
             f"Applications log at {TRACKING_PATH} should be a JSON list of "
             f"records, but contains {type(entries).__name__}."
         )
     return entries
+
+
+def _posting_changed(entry: dict) -> bool:
+    """True when the posting file on disk no longer matches the hash
+    recorded at track time — the posting was edited or replaced after
+    the application was logged, so the stored score may be stale.
+    Records without a hash, and files that can no longer be read,
+    report False: no hash means nothing to compare against, and a
+    missing file is not a changed posting."""
+    stored_sha = entry.get("posting_sha256")
+    if not stored_sha:
+        return False
+    try:
+        text = _read_posting(entry.get("posting") or "")
+    except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError):
+        return False
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() != stored_sha
 
 
 def cmd_applications(args: argparse.Namespace) -> int:
@@ -418,7 +467,8 @@ def cmd_applications(args: argparse.Namespace) -> int:
     entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
-        print(json.dumps(entries, indent=2))
+        print(json.dumps([{**e, "posting_changed": _posting_changed(e)}
+                         for e in entries], indent=2))
         return 0
     if not entries:
         if args.status:
@@ -437,6 +487,8 @@ def cmd_applications(args: argparse.Namespace) -> int:
                 f"{company} — {role}  [{e.get('status', '?')}]")
         if e.get("notes"):
             line += f"  — {e['notes']}"
+        if _posting_changed(e):
+            line += "  (posting changed since tracked)"
         print(line)
     print(f"\n{len(entries)} application(s) tracked.")
     return 0

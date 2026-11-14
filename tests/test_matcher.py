@@ -402,3 +402,24 @@ def test_skill_mentions_counts_space_spellings():
     mentions = matcher.skill_mentions(posting, ["react-native", "nextjs"])
     assert mentions["react-native"] == 2
     assert mentions["nextjs"] == 1
+
+
+def test_extract_finds_data_stack_tokens():
+    # Data-engineering and analytics postings name Spark, Snowflake,
+    # Databricks, Tableau, Looker, SageMaker, and Power BI constantly;
+    # none of them were in the vocabulary, so those postings scored on
+    # the few generic skills they happened to mention.
+    found = matcher.extract_required_skills(
+        "Data engineer: Spark, Snowflake, Databricks, Tableau, Looker, "
+        "SageMaker, and Power BI experience required.")
+    assert found == ["databricks", "looker", "power bi", "sagemaker",
+                     "snowflake", "spark", "tableau"]
+
+
+def test_extract_data_stack_alias_spellings():
+    found = matcher.extract_required_skills(
+        "Apache Spark pipelines and PowerBI dashboards.")
+    assert "spark" in found
+    assert "power bi" in found
+    report = matcher.match(["spark", "power bi"], found)
+    assert report["matched"] == ["power bi", "spark"]

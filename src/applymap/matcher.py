@@ -39,6 +39,10 @@ SKILL_TOKENS = {
     "ansible", "nginx", "prometheus", "grafana", "cypress",
     # Multi-word stack name that shows up constantly in infra postings.
     "docker compose",
+    # Data-stack tools that show up constantly in data-engineering and
+    # analytics postings but were missed entirely.
+    "spark", "snowflake", "databricks", "tableau", "looker", "sagemaker",
+    "power bi",
 }
 
 
@@ -86,6 +90,10 @@ SKILL_ALIASES = {
     # so the bare "tailwind" token never matched it.
     "tailwindcss": "tailwind",
     "tailwind-css": "tailwind",
+    # Data-stack spellings: "Apache Spark" and "PowerBI" in a posting
+    # must resolve to the same skills as "spark" and "power bi".
+    "apache spark": "spark",
+    "powerbi": "power bi",
 }
 
 

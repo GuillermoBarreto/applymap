@@ -1822,3 +1822,109 @@ def test_check_profile_warns_on_unknown_fields(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "unrecognized profile field 'skils' (did you mean 'skills'?)" in out
     assert "unrecognized profile field 'targt_roles' (did you mean 'target_roles'?)" in out
+
+
+def test_track_same_filename_different_posting_is_not_a_duplicate(tmp_path, monkeypatch, capsys):
+    """Issue #54: two different postings that share a filename are two
+    applications, not one — the dedup check compares posting content."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    first_dir = tmp_path / "acme"
+    second_dir = tmp_path / "other"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = first_dir / "posting.txt"
+    first.write_text("Backend developer: Python, SQL, Kubernetes.", encoding="utf-8")
+    second = second_dir / "posting.txt"
+    second.write_text("Frontend developer: React, TypeScript, CSS.", encoding="utf-8")
+    base = ["--profile", str(profile_path), "--company", "Acme",
+            "--role", "Backend Dev"]
+    assert main(["track", str(first)] + base) == 0
+    capsys.readouterr()
+    assert main(["track", str(second)] + base) == 0
+    assert "Already tracking" not in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 2
+    assert entries[0]["posting_sha256"] != entries[1]["posting_sha256"]
+
+
+def test_track_same_filename_same_content_is_still_a_duplicate(tmp_path, monkeypatch, capsys):
+    """Same posting text under the same filename in two folders is the
+    same application, even when the paths differ."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    first_dir = tmp_path / "acme"
+    second_dir = tmp_path / "other"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    text = "Backend developer: Python, SQL, Kubernetes."
+    first = first_dir / "posting.txt"
+    first.write_text(text, encoding="utf-8")
+    second = second_dir / "posting.txt"
+    second.write_text(text, encoding="utf-8")
+    base = ["--profile", str(profile_path), "--company", "Acme",
+            "--role", "Backend Dev"]
+    assert main(["track", str(first)] + base) == 0
+    capsys.readouterr()
+    assert main(["track", str(second)] + base) == 0
+    assert "Already tracking" in capsys.readouterr().out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+
+
+def test_applications_flags_posting_changed_since_tracked(tmp_path, monkeypatch, capsys):
+    """A posting edited after tracking makes the stored score stale;
+    `applications` says so in text and --json output."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path),
+                 "--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    posting_path.write_text(
+        "Backend developer: Python, SQL, Kubernetes, and Go required.",
+        encoding="utf-8",
+    )
+    assert main(["applications", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert entries[0]["posting_changed"] is True
+    assert main(["applications"]) == 0
+    assert "posting changed since tracked" in capsys.readouterr().out
+
+
+def test_applications_no_flag_when_posting_unchanged(tmp_path, monkeypatch, capsys):
+    """An untouched posting reports posting_changed False, and records
+    without a hash (logged before hashes existed) never flag."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path),
+                 "--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    assert main(["applications", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert entries[0]["posting_changed"] is False
+
+
+def test_applications_log_is_a_directory_is_friendly_error(tmp_path, monkeypatch, capsys):
+    """A directory sitting at the applications log path used to surface
+    as a raw "[Errno 21] Is a directory" message."""
+    from applymap import cli as cli_mod
+
+    log_dir = tmp_path / "applications.json"
+    log_dir.mkdir()
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log_dir)
+    assert main(["applications"]) == 1
+    err = capsys.readouterr().err
+    assert "Cannot read applications log" in err
+    assert "Fix or remove the file" in err
