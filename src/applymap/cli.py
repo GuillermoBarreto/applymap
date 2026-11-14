@@ -431,6 +431,23 @@ def _load_applications() -> list:
     return entries
 
 
+def _posting_changed(entry: dict) -> bool:
+    """True when the posting file on disk no longer matches the hash
+    recorded at track time — the posting was edited or replaced after
+    the application was logged, so the stored score may be stale.
+    Records without a hash, and files that can no longer be read,
+    report False: no hash means nothing to compare against, and a
+    missing file is not a changed posting."""
+    stored_sha = entry.get("posting_sha256")
+    if not stored_sha:
+        return False
+    try:
+        text = _read_posting(entry.get("posting") or "")
+    except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError):
+        return False
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() != stored_sha
+
+
 def cmd_applications(args: argparse.Namespace) -> int:
     """List tracked applications, newest first, optionally filtered by status."""
     entries = _load_applications()
@@ -442,7 +459,8 @@ def cmd_applications(args: argparse.Namespace) -> int:
     entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
-        print(json.dumps(entries, indent=2))
+        print(json.dumps([{**e, "posting_changed": _posting_changed(e)}
+                         for e in entries], indent=2))
         return 0
     if not entries:
         if args.status:
@@ -461,6 +479,8 @@ def cmd_applications(args: argparse.Namespace) -> int:
                 f"{company} — {role}  [{e.get('status', '?')}]")
         if e.get("notes"):
             line += f"  — {e['notes']}"
+        if _posting_changed(e):
+            line += "  (posting changed since tracked)"
         print(line)
     print(f"\n{len(entries)} application(s) tracked.")
     return 0

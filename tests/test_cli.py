@@ -1876,3 +1876,41 @@ def test_track_same_filename_same_content_is_still_a_duplicate(tmp_path, monkeyp
     assert "Already tracking" in capsys.readouterr().out
     entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
     assert len(entries) == 1
+
+
+def test_applications_flags_posting_changed_since_tracked(tmp_path, monkeypatch, capsys):
+    """A posting edited after tracking makes the stored score stale;
+    `applications` says so in text and --json output."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path),
+                 "--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    posting_path.write_text(
+        "Backend developer: Python, SQL, Kubernetes, and Go required.",
+        encoding="utf-8",
+    )
+    assert main(["applications", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert entries[0]["posting_changed"] is True
+    assert main(["applications"]) == 0
+    assert "posting changed since tracked" in capsys.readouterr().out
+
+
+def test_applications_no_flag_when_posting_unchanged(tmp_path, monkeypatch, capsys):
+    """An untouched posting reports posting_changed False, and records
+    without a hash (logged before hashes existed) never flag."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path),
+                 "--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    assert main(["applications", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert entries[0]["posting_changed"] is False
