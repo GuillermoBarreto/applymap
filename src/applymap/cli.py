@@ -465,13 +465,19 @@ def cmd_applications(args: argparse.Namespace) -> int:
     # output used to come back in raw insertion order, which disagreed
     # with what `applications` prints.
     entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
+    if args.changed:
+        # Only the ones whose posting was edited after tracking: those
+        # are the records whose stored score may be stale.
+        entries = [e for e in entries if _posting_changed(e)]
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps([{**e, "posting_changed": _posting_changed(e)}
                          for e in entries], indent=2))
         return 0
     if not entries:
-        if args.status:
+        if args.changed:
+            print("No applications with a changed posting.")
+        elif args.status:
             print(f"No applications with status '{args.status}' tracked yet.")
         else:
             print("No applications tracked yet. Log one with `applymap track`.")
@@ -981,6 +987,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--status", default=None,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Only show applications with this status.")
+    ps.add_argument("--changed", action="store_true",
+                    help="Only show applications whose posting changed since tracked.")
     ps.add_argument("--json", action="store_true",
                     help="Print the tracked records as JSON instead of text.")
     ps.set_defaults(func=cmd_applications)

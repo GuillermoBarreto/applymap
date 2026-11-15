@@ -88,6 +88,7 @@ List what you've applied to (newest first), optionally filtered by status:
 ```bash
 applymap applications
 applymap applications --status interview
+applymap applications --changed   # only postings edited since you tracked them
 applymap applications --json   # machine-readable records for scripting
 ```
 

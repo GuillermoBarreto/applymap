@@ -1928,3 +1928,46 @@ def test_applications_log_is_a_directory_is_friendly_error(tmp_path, monkeypatch
     err = capsys.readouterr().err
     assert "Cannot read applications log" in err
     assert "Fix or remove the file" in err
+
+
+def test_applications_changed_filter_lists_only_changed(tmp_path, monkeypatch, capsys):
+    """--changed narrows the list to applications whose posting was
+    edited after tracking, in text and --json output."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, first = _write_profile_and_posting(tmp_path)
+    second = tmp_path / "other.txt"
+    second.write_text("Frontend developer: React, TypeScript, CSS.", encoding="utf-8")
+    base = ["--profile", str(profile_path)]
+    assert main(["track", str(first)] + base + ["--company", "Acme", "--role", "Backend Dev"]) == 0
+    assert main(["track", str(second)] + base + ["--company", "Globex", "--role", "SDE"]) == 0
+    capsys.readouterr()
+    first.write_text(
+        "Backend developer: Python, SQL, Kubernetes, and Go required.",
+        encoding="utf-8",
+    )
+    assert main(["applications", "--changed"]) == 0
+    out = capsys.readouterr().out
+    assert "Acme" in out
+    assert "Globex" not in out
+    assert main(["applications", "--changed", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert len(entries) == 1
+    assert entries[0]["company"] == "Acme"
+    assert entries[0]["posting_changed"] is True
+
+
+def test_applications_changed_filter_empty_message(tmp_path, monkeypatch, capsys):
+    """--changed with no changed postings says so instead of listing
+    everything or printing the generic empty-log message."""
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path),
+                 "--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    assert main(["applications", "--changed"]) == 0
+    assert "No applications with a changed posting" in capsys.readouterr().out
