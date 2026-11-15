@@ -763,7 +763,8 @@ def cmd_followup(args: argparse.Namespace) -> int:
             {"days_waiting": waiting, "date": e.get("date"),
              "company": e.get("company"), "role": e.get("role"),
              "status": e.get("status"), "notes": e.get("notes"),
-             "posting": e.get("posting")}
+             "posting": e.get("posting"),
+             "posting_changed": _posting_changed(e)}
             for waiting, e in stale], indent=2))
         return 0
     if not stale:
@@ -774,7 +775,13 @@ def cmd_followup(args: argparse.Namespace) -> int:
     for waiting, e in stale:
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
-        print(f"  {waiting}d  [{e.get('status')}]  {company} — {role} (logged {e.get('date')})")
+        line = (f"  {waiting}d  [{e.get('status')}]  {company} — {role} "
+                f"(logged {e.get('date')})")
+        if _posting_changed(e):
+            # The posting was edited after tracking, so the score this
+            # nudge is based on may be stale — say so, like `applications`.
+            line += "  (posting changed since tracked)"
+        print(line)
     return 0
 
 
