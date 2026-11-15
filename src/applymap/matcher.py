@@ -43,6 +43,9 @@ SKILL_TOKENS = {
     # analytics postings but were missed entirely.
     "spark", "snowflake", "databricks", "tableau", "looker", "sagemaker",
     "power bi",
+    # Backend and data tools that show up constantly in backend and
+    # data postings but were missed entirely.
+    "grpc", "celery", "bigquery", "redshift", "jupyter",
 }
 
 
@@ -94,6 +97,13 @@ SKILL_ALIASES = {
     # must resolve to the same skills as "spark" and "power bi".
     "apache spark": "spark",
     "powerbi": "power bi",
+    # Fused spellings common in postings: "SpringBoot" and
+    # "ReactNative" are single tokens, so the bare skill never matched.
+    "springboot": "spring boot",
+    "reactnative": "react-native",
+    # Versioned spelling: "OAuth2" in a posting tokenizes as "oauth2",
+    # which never matched the bare "oauth" token.
+    "oauth2": "oauth",
 }
 
 

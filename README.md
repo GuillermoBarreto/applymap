@@ -88,6 +88,7 @@ List what you've applied to (newest first), optionally filtered by status:
 ```bash
 applymap applications
 applymap applications --status interview
+applymap applications --changed   # only postings edited since you tracked them
 applymap applications --json   # machine-readable records for scripting
 ```
 
@@ -130,6 +131,9 @@ Export the whole log to a spreadsheet:
 applymap export --csv applications.csv
 applymap export --csv applications.json --format json   # for scripts
 ```
+
+Both formats include a `posting_changed` flag per application, so a
+spreadsheet shows which stored scores may be stale.
 
 5. AI features (optional, need an API key):
 

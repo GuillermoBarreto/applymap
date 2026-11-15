@@ -843,11 +843,14 @@ def test_export_writes_csv_with_header_and_rows(tmp_path, monkeypatch, capsys):
     assert rc == 0
     rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
     assert rows[0] == ["date", "company", "role", "status", "score",
-                       "matched_skills", "missing_skills", "posting", "notes"]
+                       "matched_skills", "missing_skills", "posting", "notes",
+                       "posting_changed"]
     assert rows[1][1:5] == ["Globex", "SDE", "interview", "82"]
     assert rows[2][1:5] == ["Acme", "Backend Dev", "applied", "67"]
     # Records seeded before --notes existed have no notes field: empty cell.
-    assert rows[1][-1] == "" and rows[2][-1] == ""
+    assert rows[1][-2] == "" and rows[2][-2] == ""
+    # Seeded records have no posting file, so nothing can have changed.
+    assert rows[1][-1] == "false" and rows[2][-1] == "false"
     assert "Wrote 2 application(s)" in capsys.readouterr().out
 
 
@@ -1079,7 +1082,8 @@ def test_followup_json_reports_stale_applications(tmp_path, monkeypatch, capsys)
     parsed = json.loads(capsys.readouterr().out)
     assert parsed == [
         {"days_waiting": 45, "date": old, "company": "StaleCo",
-         "role": "Dev", "status": "applied", "notes": None, "posting": None}
+         "role": "Dev", "status": "applied", "notes": None, "posting": None,
+         "posting_changed": False}
     ]
 
 
@@ -1112,7 +1116,7 @@ def test_followup_json_includes_notes_and_posting(tmp_path, monkeypatch, capsys)
         {"days_waiting": 45, "date": old, "company": "StaleCo",
          "role": "Dev", "status": "applied",
          "notes": "Recruiter: Dana, deadline Nov 20",
-         "posting": "postings/staleco-dev.txt"}
+         "posting": "postings/staleco-dev.txt", "posting_changed": False}
     ]
 
 
@@ -1928,3 +1932,111 @@ def test_applications_log_is_a_directory_is_friendly_error(tmp_path, monkeypatch
     err = capsys.readouterr().err
     assert "Cannot read applications log" in err
     assert "Fix or remove the file" in err
+
+
+def test_applications_changed_filter_lists_only_changed(tmp_path, monkeypatch, capsys):
+    """--changed narrows the list to applications whose posting was
+    edited after tracking, in text and --json output."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, first = _write_profile_and_posting(tmp_path)
+    second = tmp_path / "other.txt"
+    second.write_text("Frontend developer: React, TypeScript, CSS.", encoding="utf-8")
+    base = ["--profile", str(profile_path)]
+    assert main(["track", str(first)] + base + ["--company", "Acme", "--role", "Backend Dev"]) == 0
+    assert main(["track", str(second)] + base + ["--company", "Globex", "--role", "SDE"]) == 0
+    capsys.readouterr()
+    first.write_text(
+        "Backend developer: Python, SQL, Kubernetes, and Go required.",
+        encoding="utf-8",
+    )
+    assert main(["applications", "--changed"]) == 0
+    out = capsys.readouterr().out
+    assert "Acme" in out
+    assert "Globex" not in out
+    assert main(["applications", "--changed", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert len(entries) == 1
+    assert entries[0]["company"] == "Acme"
+    assert entries[0]["posting_changed"] is True
+
+
+def test_applications_changed_filter_empty_message(tmp_path, monkeypatch, capsys):
+    """--changed with no changed postings says so instead of listing
+    everything or printing the generic empty-log message."""
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    assert main(["track", str(posting_path), "--profile", str(profile_path),
+                 "--company", "Acme", "--role", "Backend Dev"]) == 0
+    capsys.readouterr()
+    assert main(["applications", "--changed"]) == 0
+    assert "No applications with a changed posting" in capsys.readouterr().out
+
+
+def test_export_includes_posting_changed(tmp_path, monkeypatch, capsys):
+    """Export keeps the changed-posting flag: a CSV column and a JSON
+    field, so a spreadsheet shows which stored scores may be stale."""
+    import csv
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, first = _write_profile_and_posting(tmp_path)
+    second = tmp_path / "other.txt"
+    second.write_text("Frontend developer: React, TypeScript, CSS.", encoding="utf-8")
+    base = ["--profile", str(profile_path)]
+    assert main(["track", str(first)] + base + ["--company", "Acme", "--role", "Backend Dev"]) == 0
+    assert main(["track", str(second)] + base + ["--company", "Globex", "--role", "SDE"]) == 0
+    capsys.readouterr()
+    first.write_text(
+        "Backend developer: Python, SQL, Kubernetes, and Go required.",
+        encoding="utf-8",
+    )
+    out = tmp_path / "apps.csv"
+    assert main(["export", "--csv", str(out)]) == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert rows[0][-1] == "posting_changed"
+    changed = {r[1]: r[-1] for r in rows[1:]}
+    assert changed == {"Acme": "true", "Globex": "false"}
+    out_json = tmp_path / "apps.json"
+    assert main(["export", "--output", str(out_json), "--format", "json"]) == 0
+    data = json.loads(out_json.read_text(encoding="utf-8"))
+    assert {d["company"]: d["posting_changed"] for d in data} == {
+        "Acme": True, "Globex": False,
+    }
+
+
+def test_followup_marks_posting_changed(tmp_path, monkeypatch, capsys):
+    """A stale application whose posting was edited since tracking is
+    flagged in followup: the fit score it was logged with may be stale,
+    so the nudge should say so. Text and --json both carry it."""
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, first = _write_profile_and_posting(tmp_path)
+    second = tmp_path / "other.txt"
+    second.write_text("Frontend developer: React, TypeScript, CSS.", encoding="utf-8")
+    base = ["--profile", str(profile_path), "--date", "2026-10-01"]
+    assert main(["track", str(first)] + base + ["--company", "Acme", "--role", "Backend Dev"]) == 0
+    assert main(["track", str(second)] + base + ["--company", "Globex", "--role", "SDE"]) == 0
+    capsys.readouterr()
+    first.write_text(
+        "Backend developer: Python, SQL, Kubernetes, and Go required.",
+        encoding="utf-8",
+    )
+    assert main(["followup"]) == 0
+    out = capsys.readouterr().out
+    acme_line = [l for l in out.splitlines() if "Acme" in l][0]
+    globex_line = [l for l in out.splitlines() if "Globex" in l][0]
+    assert "posting changed" in acme_line
+    assert "posting changed" not in globex_line
+    assert main(["followup", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert {d["company"]: d["posting_changed"] for d in data} == {
+        "Acme": True, "Globex": False,
+    }

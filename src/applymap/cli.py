@@ -465,13 +465,19 @@ def cmd_applications(args: argparse.Namespace) -> int:
     # output used to come back in raw insertion order, which disagreed
     # with what `applications` prints.
     entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
+    if args.changed:
+        # Only the ones whose posting was edited after tracking: those
+        # are the records whose stored score may be stale.
+        entries = [e for e in entries if _posting_changed(e)]
     if args.json:
         # Machine-readable output for scripting (e.g. piping into jq).
         print(json.dumps([{**e, "posting_changed": _posting_changed(e)}
                          for e in entries], indent=2))
         return 0
     if not entries:
-        if args.status:
+        if args.changed:
+            print("No applications with a changed posting.")
+        elif args.status:
             print(f"No applications with status '{args.status}' tracked yet.")
         else:
             print("No applications tracked yet. Log one with `applymap track`.")
@@ -508,13 +514,18 @@ def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.csv).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
     if args.format == "json":
-        out.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+        # Same posting_changed flag `applications --json` adds: an export
+        # that drops it hides which stored scores may be stale.
+        out.write_text(json.dumps(
+            [{**e, "posting_changed": _posting_changed(e)} for e in entries],
+            indent=2) + "\n", encoding="utf-8")
     else:
         with open(out, "w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             writer.writerow([
                 "date", "company", "role", "status", "score",
                 "matched_skills", "missing_skills", "posting", "notes",
+                "posting_changed",
             ])
             for e in entries:
                 writer.writerow([
@@ -533,6 +544,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                     # Records tracked before --notes existed have no notes
                     # field; export an empty cell, not the literal "None".
                     e.get("notes", ""),
+                    # "true"/"false" to match the JSON boolean below.
+                    str(_posting_changed(e)).lower(),
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
@@ -750,7 +763,8 @@ def cmd_followup(args: argparse.Namespace) -> int:
             {"days_waiting": waiting, "date": e.get("date"),
              "company": e.get("company"), "role": e.get("role"),
              "status": e.get("status"), "notes": e.get("notes"),
-             "posting": e.get("posting")}
+             "posting": e.get("posting"),
+             "posting_changed": _posting_changed(e)}
             for waiting, e in stale], indent=2))
         return 0
     if not stale:
@@ -761,7 +775,13 @@ def cmd_followup(args: argparse.Namespace) -> int:
     for waiting, e in stale:
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
-        print(f"  {waiting}d  [{e.get('status')}]  {company} — {role} (logged {e.get('date')})")
+        line = (f"  {waiting}d  [{e.get('status')}]  {company} — {role} "
+                f"(logged {e.get('date')})")
+        if _posting_changed(e):
+            # The posting was edited after tracking, so the score this
+            # nudge is based on may be stale — say so, like `applications`.
+            line += "  (posting changed since tracked)"
+        print(line)
     return 0
 
 
@@ -981,6 +1001,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--status", default=None,
                     choices=["interested", "applied", "interview", "offer", "rejected"],
                     help="Only show applications with this status.")
+    ps.add_argument("--changed", action="store_true",
+                    help="Only show applications whose posting changed since tracked.")
     ps.add_argument("--json", action="store_true",
                     help="Print the tracked records as JSON instead of text.")
     ps.set_defaults(func=cmd_applications)

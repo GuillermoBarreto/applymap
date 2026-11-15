@@ -423,3 +423,26 @@ def test_extract_data_stack_alias_spellings():
     assert "power bi" in found
     report = matcher.match(["spark", "power bi"], found)
     assert report["matched"] == ["power bi", "spark"]
+
+
+def test_extract_finds_backend_and_data_tokens():
+    # Backend and data postings name gRPC, Celery, BigQuery, Redshift,
+    # and Jupyter constantly; none were in the vocabulary, so those
+    # postings scored on the few generic skills they happened to mention.
+    found = matcher.extract_required_skills(
+        "Backend engineer: gRPC services, Celery workers, BigQuery, "
+        "Redshift, and Jupyter notebooks.")
+    assert found == ["bigquery", "celery", "grpc", "jupyter", "redshift"]
+
+
+def test_extract_backend_alias_spellings():
+    # Fused spellings ("SpringBoot", "ReactNative") and versioned ones
+    # ("OAuth2") are single tokens in a posting, so the bare skill
+    # never matched them.
+    found = matcher.extract_required_skills(
+        "SpringBoot microservices, ReactNative app, OAuth2 login.")
+    assert "spring boot" in found
+    assert "react-native" in found
+    assert "oauth" in found
+    report = matcher.match(["spring boot", "react-native", "oauth"], found)
+    assert report["matched"] == ["oauth", "react-native", "spring boot"]
