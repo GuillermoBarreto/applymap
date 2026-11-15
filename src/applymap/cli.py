@@ -514,13 +514,18 @@ def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.csv).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
     if args.format == "json":
-        out.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+        # Same posting_changed flag `applications --json` adds: an export
+        # that drops it hides which stored scores may be stale.
+        out.write_text(json.dumps(
+            [{**e, "posting_changed": _posting_changed(e)} for e in entries],
+            indent=2) + "\n", encoding="utf-8")
     else:
         with open(out, "w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             writer.writerow([
                 "date", "company", "role", "status", "score",
                 "matched_skills", "missing_skills", "posting", "notes",
+                "posting_changed",
             ])
             for e in entries:
                 writer.writerow([
@@ -539,6 +544,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                     # Records tracked before --notes existed have no notes
                     # field; export an empty cell, not the literal "None".
                     e.get("notes", ""),
+                    # "true"/"false" to match the JSON boolean below.
+                    str(_posting_changed(e)).lower(),
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
