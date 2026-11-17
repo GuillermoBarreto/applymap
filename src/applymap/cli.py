@@ -88,7 +88,7 @@ def cmd_init_profile(args: argparse.Namespace) -> int:
         "  - docker\n"
         "  - fastapi\n"
         "experience:\n"
-        "  - Resolved 2,579 support tickets across switches, routers, and access points\n"
+        "  - Resolved thousands of support tickets across switches, routers, and access points\n"
         "  - Automated routine tasks with Python scripts, saving ~31 hours/week\n"
     )
     path.write_text(template, encoding="utf-8")
@@ -551,6 +551,23 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _most_missing_skills(entries: list, limit: int = 5) -> list:
+    """Most often missing skills across tracked applications.
+
+    Each skill counts once per application, so a skill missing from
+    three postings outranks one missing from a single posting. Ties
+    break alphabetically so the order is stable run to run. Records
+    written before missing_skills existed carry none and are skipped.
+    """
+    counts: dict = {}
+    for e in entries:
+        for skill in set(e.get("missing_skills") or []):
+            counts[skill] = counts.get(skill, 0) + 1
+    ranked = sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
+    return [{"skill": skill, "count": count}
+            for skill, count in ranked[:limit]]
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     """Print a summary of tracked applications: totals, status counts, best fit."""
     entries = _load_applications()
@@ -562,6 +579,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         e["score"] for e in entries
         if isinstance(e.get("score"), (int, float))
     ]
+    most_missing = _most_missing_skills(entries)
     if getattr(args, "json", False):
         # Machine-readable form of the same summary, for scripts: the
         # other report commands (analyze, rank, applications, export)
@@ -580,6 +598,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
             "by_status": counts,
             "average_score": round(sum(scores) / len(scores)) if scores else None,
             "best_fit": best,
+            "most_missing_skills": most_missing,
         }, indent=2))
         return 0
     if not entries:
@@ -600,6 +619,12 @@ def cmd_stats(args: argparse.Namespace) -> int:
         role = best.get("role") or "(unknown role)"
         print(f"\nAverage fit score: {avg}/100")
         print(f"Best fit: {company} — {role} ({best.get('score')}/100)")
+    if most_missing:
+        # What to study next: the skills the tracked postings keep asking
+        # for that the profile doesn't have yet.
+        print("\nMost often missing:")
+        for item in most_missing:
+            print(f"  {item['skill']}: missing from {item['count']} application(s)")
     _print_funnel(counts)
     return 0
 
@@ -691,6 +716,9 @@ def cmd_update_status(args: argparse.Namespace) -> int:
         print("Re-run with --posting <posting file> to pick one.")
         return 1
     entries[matches[0]]["status"] = args.status
+    # Stamp the change so followup measures the wait from here, not
+    # from the day the application was first logged.
+    entries[matches[0]]["updated"] = datetime.date.today().isoformat()
     _save_applications(entries)
     print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
     return 0
@@ -732,6 +760,23 @@ def cmd_untrack(args: argparse.Namespace) -> int:
     return 0
 
 
+def _last_activity_date(entry: dict) -> datetime.date | None:
+    """Latest of the track date and the last status-change date.
+
+    Records written before update-status started stamping `updated`
+    carry no such field, so they fall back to the track date. A
+    hand-edited record with no usable date returns None and the caller
+    skips it, the way followup already skipped bad track dates.
+    """
+    dates = []
+    for key in ("date", "updated"):
+        try:
+            dates.append(datetime.date.fromisoformat(entry.get(key) or ""))
+        except (ValueError, TypeError):
+            continue
+    return max(dates) if dates else None
+
+
 def cmd_followup(args: argparse.Namespace) -> int:
     """List applications still waiting for a response after --days days.
 
@@ -745,11 +790,11 @@ def cmd_followup(args: argparse.Namespace) -> int:
     for e in entries:
         if e.get("status") not in ("applied", "interview"):
             continue
-        try:
-            logged = datetime.date.fromisoformat(e.get("date") or "")
-        except (ValueError, TypeError):
-            # A hand-edited record with a bad date is still tracked — skip
-            # it here rather than crashing the whole report.
+        # Waiting time runs from the last status change, not the day the
+        # application was first logged: an interview booked yesterday is
+        # not a 40-day silence just because the application is old.
+        logged = _last_activity_date(e)
+        if logged is None:
             continue
         waiting = (today - logged).days
         if waiting >= args.days:

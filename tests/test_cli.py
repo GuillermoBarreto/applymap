@@ -827,7 +827,7 @@ def test_stats_json_empty_log_reports_zeros(tmp_path, monkeypatch, capsys):
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data == {"total": 0, "by_status": {}, "average_score": None,
-                    "best_fit": None}
+                    "best_fit": None, "most_missing_skills": []}
 
 
 def test_parser_has_stats_subcommand():
@@ -2040,3 +2040,130 @@ def test_followup_marks_posting_changed(tmp_path, monkeypatch, capsys):
     assert {d["company"]: d["posting_changed"] for d in data} == {
         "Acme": True, "Globex": False,
     }
+
+
+def test_update_status_stamps_updated_date(tmp_path, monkeypatch):
+    import datetime
+    import json
+
+    log = _seed_applications_log(tmp_path, monkeypatch)
+    rc = main(["update-status", "--company", "Acme", "--role", "Backend Dev",
+               "--status", "interview"])
+    assert rc == 0
+    entries = json.loads(log.read_text(encoding="utf-8"))
+    acme = [e for e in entries if e["company"] == "Acme"][0]
+    assert acme["updated"] == datetime.date.today().isoformat()
+
+
+def test_followup_waits_from_last_status_change(tmp_path, monkeypatch, capsys):
+    import datetime
+    import json
+    from applymap import cli as cli_mod
+
+    today = datetime.date.today()
+    logged = (today - datetime.timedelta(days=45)).isoformat()
+    moved = (today - datetime.timedelta(days=3)).isoformat()
+    stale_since_move = (today - datetime.timedelta(days=35)).isoformat()
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                # Moved to interview 3 days ago: the wait restarts there,
+                # even though the application itself is 45 days old.
+                {"date": logged, "updated": moved, "company": "MovedCo",
+                 "role": "Dev", "score": 80, "status": "interview"},
+                # Moved 35 days ago: still stale, but the wait is 35 days,
+                # not 45.
+                {"date": logged, "updated": stale_since_move,
+                 "company": "StaleMoveCo", "role": "Dev", "score": 75,
+                 "status": "interview"},
+                # No updated field (logged before stamping existed): the
+                # track date still decides.
+                {"date": logged, "company": "OldCo", "role": "Dev",
+                 "score": 70, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["followup"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "MovedCo" not in out
+    assert "StaleMoveCo" in out
+    assert " 35d" in out
+    assert "OldCo" in out
+    assert " 45d" in out
+
+
+def test_stats_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied",
+                 "missing_skills": ["kubernetes", "graphql"]},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview",
+                 "missing_skills": ["kubernetes", "terraform"]},
+                {"date": "2026-10-14", "company": "Initech", "role": "SDE",
+                 "score": 55, "status": "applied",
+                 "missing_skills": ["graphql", "terraform", "kubernetes"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Most often missing:" in out
+    # kubernetes is missing from all three; graphql and terraform from two.
+    assert "kubernetes: missing from 3 application(s)" in out
+    assert "graphql: missing from 2 application(s)" in out
+    assert "terraform: missing from 2 application(s)" in out
+    assert out.index("kubernetes") < out.index("graphql")
+
+
+def test_stats_json_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied",
+                 "missing_skills": ["kubernetes", "graphql"]},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview",
+                 "missing_skills": ["kubernetes"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["most_missing_skills"] == [
+        {"skill": "kubernetes", "count": 2},
+        {"skill": "graphql", "count": 1},
+    ]
+
+
+def test_init_profile_template_has_no_exact_ticket_count(tmp_path):
+    # The shipped template is public-facing; it should describe the
+    # experience the way examples/profile.example.yaml does, without an
+    # exact personal count in it.
+    out = tmp_path / "profile.yaml"
+    rc = main(["init-profile", "--path", str(out)])
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    assert "2,579" not in text
+    assert "thousands of support tickets" in text

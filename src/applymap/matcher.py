@@ -46,6 +46,14 @@ SKILL_TOKENS = {
     # Backend and data tools that show up constantly in backend and
     # data postings but were missed entirely.
     "grpc", "celery", "bigquery", "redshift", "jupyter",
+    # Languages, platforms and tools that show up constantly in postings
+    # but were missed entirely.
+    "scala", "perl", "lua", "elixir", "erlang", "clojure", "haskell",
+    "solidity", "matlab", "gitlab", "bitbucket", "circleci", "confluence",
+    "slack", "excel", "redux", "sass", "bootstrap", "hadoop", "cassandra",
+    "neo4j", "firestore", "sqlalchemy", "langchain", "huggingface",
+    "opencv", "mlflow", "apache", "windows", "android", "ios",
+    "wordpress", "shopify", "unity", "puppet", "datadog", "sentry",
 }
 
 
@@ -104,6 +112,9 @@ SKILL_ALIASES = {
     # Versioned spelling: "OAuth2" in a posting tokenizes as "oauth2",
     # which never matched the bare "oauth" token.
     "oauth2": "oauth",
+    # Space spelling: "Hugging Face" in a posting is two words, the
+    # token is one.
+    "hugging face": "huggingface",
 }
 
 

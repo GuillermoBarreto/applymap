@@ -118,12 +118,18 @@ offer conversion funnel:
 applymap stats
 ```
 
+It also lists the skills most often missing across your tracked
+applications, so you know what to study next.
+
 Find applications that have been waiting too long for a response:
 
 ```bash
 applymap followup            # 'applied' 30+ days with no status change
 applymap followup --days 14  # flag anything waiting 2 weeks or more
 ```
+
+Waiting time runs from the last status change, so an application that
+just moved to interview doesn't show up as stale.
 
 Export the whole log to a spreadsheet:
 
