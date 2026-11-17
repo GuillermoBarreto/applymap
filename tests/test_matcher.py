@@ -446,3 +446,32 @@ def test_extract_backend_alias_spellings():
     assert "oauth" in found
     report = matcher.match(["spring boot", "react-native", "oauth"], found)
     assert report["matched"] == ["oauth", "react-native", "spring boot"]
+
+
+def test_extract_finds_platform_and_tool_tokens():
+    # Languages, platforms and tools that show up constantly in postings
+    # but were missing from the vocabulary, so those postings scored on
+    # the few generic skills they happened to mention.
+    found = matcher.extract_required_skills(
+        "Scala, Perl, Lua, Elixir, Erlang, Clojure, Haskell, Solidity, "
+        "Matlab, GitLab, Bitbucket, CircleCI, Confluence, Slack, Excel, "
+        "Redux, Sass, Bootstrap, Hadoop, Cassandra, Neo4j, Firestore, "
+        "SQLAlchemy, LangChain, HuggingFace, OpenCV, MLflow, Apache, "
+        "Windows, Android, iOS, WordPress, Shopify, Unity, Puppet, "
+        "Datadog, Sentry.")
+    assert found == [
+        "android", "apache", "bitbucket", "bootstrap", "cassandra",
+        "circleci", "clojure", "confluence", "datadog", "elixir",
+        "erlang", "excel", "firestore", "gitlab", "hadoop", "haskell",
+        "huggingface", "ios", "langchain", "lua", "matlab", "mlflow",
+        "neo4j", "opencv", "perl", "puppet", "redux", "sass", "scala",
+        "sentry", "shopify", "slack", "solidity", "sqlalchemy", "unity",
+        "windows", "wordpress",
+    ]
+
+
+def test_extract_hugging_face_alias():
+    # "Hugging Face" in a posting is two words; the token is one.
+    found = matcher.extract_required_skills(
+        "Experience with Hugging Face transformers preferred.")
+    assert "huggingface" in found
