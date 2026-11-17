@@ -691,6 +691,9 @@ def cmd_update_status(args: argparse.Namespace) -> int:
         print("Re-run with --posting <posting file> to pick one.")
         return 1
     entries[matches[0]]["status"] = args.status
+    # Stamp the change so followup measures the wait from here, not
+    # from the day the application was first logged.
+    entries[matches[0]]["updated"] = datetime.date.today().isoformat()
     _save_applications(entries)
     print(f"Updated {args.company} — {args.role} to status '{args.status}'.")
     return 0
@@ -732,6 +735,23 @@ def cmd_untrack(args: argparse.Namespace) -> int:
     return 0
 
 
+def _last_activity_date(entry: dict) -> datetime.date | None:
+    """Latest of the track date and the last status-change date.
+
+    Records written before update-status started stamping `updated`
+    carry no such field, so they fall back to the track date. A
+    hand-edited record with no usable date returns None and the caller
+    skips it, the way followup already skipped bad track dates.
+    """
+    dates = []
+    for key in ("date", "updated"):
+        try:
+            dates.append(datetime.date.fromisoformat(entry.get(key) or ""))
+        except (ValueError, TypeError):
+            continue
+    return max(dates) if dates else None
+
+
 def cmd_followup(args: argparse.Namespace) -> int:
     """List applications still waiting for a response after --days days.
 
@@ -745,11 +765,11 @@ def cmd_followup(args: argparse.Namespace) -> int:
     for e in entries:
         if e.get("status") not in ("applied", "interview"):
             continue
-        try:
-            logged = datetime.date.fromisoformat(e.get("date") or "")
-        except (ValueError, TypeError):
-            # A hand-edited record with a bad date is still tracked — skip
-            # it here rather than crashing the whole report.
+        # Waiting time runs from the last status change, not the day the
+        # application was first logged: an interview booked yesterday is
+        # not a 40-day silence just because the application is old.
+        logged = _last_activity_date(e)
+        if logged is None:
             continue
         waiting = (today - logged).days
         if waiting >= args.days:
