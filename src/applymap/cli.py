@@ -88,7 +88,7 @@ def cmd_init_profile(args: argparse.Namespace) -> int:
         "  - docker\n"
         "  - fastapi\n"
         "experience:\n"
-        "  - Resolved 2,579 support tickets across switches, routers, and access points\n"
+        "  - Resolved thousands of support tickets across switches, routers, and access points\n"
         "  - Automated routine tasks with Python scripts, saving ~31 hours/week\n"
     )
     path.write_text(template, encoding="utf-8")

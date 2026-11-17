@@ -2155,3 +2155,15 @@ def test_stats_json_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
         {"skill": "kubernetes", "count": 2},
         {"skill": "graphql", "count": 1},
     ]
+
+
+def test_init_profile_template_has_no_exact_ticket_count(tmp_path):
+    # The shipped template is public-facing; it should describe the
+    # experience the way examples/profile.example.yaml does, without an
+    # exact personal count in it.
+    out = tmp_path / "profile.yaml"
+    rc = main(["init-profile", "--path", str(out)])
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    assert "2,579" not in text
+    assert "thousands of support tickets" in text

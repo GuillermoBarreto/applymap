@@ -53,6 +53,7 @@
   "tests/test_cli.py::test_followup_negative_days_is_rejected",
   "tests/test_cli.py::test_followup_waits_from_last_status_change",
   "tests/test_cli.py::test_followup_zero_days_is_allowed",
+  "tests/test_cli.py::test_init_profile_template_has_no_exact_ticket_count",
   "tests/test_cli.py::test_init_profile_to_directory_is_friendly_error",
   "tests/test_cli.py::test_main_handles_keyboard_interrupt",
   "tests/test_cli.py::test_parser_has_check_profile_subcommand",
