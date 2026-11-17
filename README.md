@@ -118,6 +118,9 @@ offer conversion funnel:
 applymap stats
 ```
 
+It also lists the skills most often missing across your tracked
+applications, so you know what to study next.
+
 Find applications that have been waiting too long for a response:
 
 ```bash

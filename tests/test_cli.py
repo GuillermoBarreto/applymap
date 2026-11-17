@@ -827,7 +827,7 @@ def test_stats_json_empty_log_reports_zeros(tmp_path, monkeypatch, capsys):
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data == {"total": 0, "by_status": {}, "average_score": None,
-                    "best_fit": None}
+                    "best_fit": None, "most_missing_skills": []}
 
 
 def test_parser_has_stats_subcommand():
@@ -2094,3 +2094,64 @@ def test_followup_waits_from_last_status_change(tmp_path, monkeypatch, capsys):
     assert " 35d" in out
     assert "OldCo" in out
     assert " 45d" in out
+
+
+def test_stats_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied",
+                 "missing_skills": ["kubernetes", "graphql"]},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview",
+                 "missing_skills": ["kubernetes", "terraform"]},
+                {"date": "2026-10-14", "company": "Initech", "role": "SDE",
+                 "score": 55, "status": "applied",
+                 "missing_skills": ["graphql", "terraform", "kubernetes"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Most often missing:" in out
+    # kubernetes is missing from all three; graphql and terraform from two.
+    assert "kubernetes: missing from 3 application(s)" in out
+    assert "graphql: missing from 2 application(s)" in out
+    assert "terraform: missing from 2 application(s)" in out
+    assert out.index("kubernetes") < out.index("graphql")
+
+
+def test_stats_json_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied",
+                 "missing_skills": ["kubernetes", "graphql"]},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview",
+                 "missing_skills": ["kubernetes"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["most_missing_skills"] == [
+        {"skill": "kubernetes", "count": 2},
+        {"skill": "graphql", "count": 1},
+    ]
