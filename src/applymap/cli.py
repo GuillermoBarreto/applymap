@@ -760,6 +760,81 @@ def cmd_untrack(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rescore(args: argparse.Namespace) -> int:
+    """Re-score tracked applications against the current profile and the
+    posting text as it reads now (issue #62).
+
+    A stored score goes stale two ways: the profile gains skills, or the
+    posting is edited after tracking. `applications --changed` only flags
+    the second; rescore fixes both by re-running the match and updating
+    the stored score, matched/missing skills, and posting hash. With
+    --company/--role it re-scores one application (plus --posting when
+    company+role matches several); without them it re-scores every
+    tracked application whose posting file can still be read. A posting
+    file that is gone is skipped, not an error — the record keeps its
+    old score.
+    """
+    if bool(args.company) != bool(args.role):
+        print("Pass both --company and --role to re-score one application, "
+              "or neither to re-score all of them.")
+        return 1
+    prof = profile_mod.load_profile(args.profile)
+    entries = _load_applications()
+    if not entries:
+        print("No applications tracked yet. Log one with `applymap track`.")
+        return 0
+    if args.company is not None:
+        matches = _find_application_indexes(
+            entries, args.company, args.role, args.posting
+        )
+        if not matches:
+            hint = f" from '{args.posting}'" if args.posting else ""
+            print(f"No tracked application for '{args.company}' — '{args.role}'"
+                  f"{hint}. Log it first with `applymap track`.")
+            return 1
+        if len(matches) > 1:
+            print(f"Multiple applications match '{args.company}' — '{args.role}':")
+            for i in matches:
+                e = entries[i]
+                print(f"  {e.get('date', '?')}  "
+                      f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
+            print("Re-run with --posting <posting file> to pick one.")
+            return 1
+        targets = matches
+    else:
+        targets = list(range(len(entries)))
+    rescored = 0
+    skipped = 0
+    for i in targets:
+        e = entries[i]
+        try:
+            posting = _read_posting(e.get("posting") or "")
+        except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError):
+            skipped += 1
+            continue
+        old = e.get("score")
+        report = matcher.match(prof["skills"],
+                               matcher.extract_required_skills(posting))
+        e["score"] = report["score"]
+        e["matched_skills"] = report["matched"]
+        e["missing_skills"] = report["missing"]
+        e["posting_sha256"] = hashlib.sha256(posting.encode("utf-8")).hexdigest()
+        rescored += 1
+        old_txt = f"{old}/100" if isinstance(old, (int, float)) else "n/a"
+        new = report["score"]
+        new_txt = f"{new}/100" if isinstance(new, (int, float)) else "n/a"
+        company = e.get("company") or "(unknown company)"
+        role = e.get("role") or "(unknown role)"
+        print(f"Rescored {company} — {role}: {old_txt} -> {new_txt}")
+    if rescored:
+        _save_applications(entries)
+    if skipped:
+        print(f"Skipped {skipped} application(s) whose posting file "
+              f"could not be read; their scores are unchanged.")
+    print(f"Rescored {rescored} application(s).")
+    return 0
+
+
 def _last_activity_date(entry: dict) -> datetime.date | None:
     """Latest of the track date and the last status-change date.
 
@@ -1041,6 +1116,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Only remove the application tracked from this posting file; "
                          "use when company+role alone matches more than one.")
     prm.set_defaults(func=cmd_untrack)
+
+    prs = sub.add_parser("rescore", help="Re-score tracked applications against the current profile.")
+    prs.add_argument("--company", default=None, help="Company name (matches track --company); re-score only this application.")
+    prs.add_argument("--role", default=None, help="Role title (matches track --role).")
+    prs.add_argument("--posting", default=None, metavar="FILE",
+                     help="Only match the application tracked from this posting file; "
+                          "use when company+role alone matches more than one.")
+    prs.add_argument("--profile", default=None)
+    prs.set_defaults(func=cmd_rescore)
 
     ps = sub.add_parser("applications", help="List tracked applications.")
     ps.add_argument("--status", default=None,

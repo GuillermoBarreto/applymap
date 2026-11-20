@@ -91,7 +91,7 @@ def test_main_handles_keyboard_interrupt(monkeypatch):
 def test_parser_has_subcommands():
     parser = build_parser()
     subparsers = parser._subparsers._group_actions[0]
-    for cmd in ("init-profile", "analyze", "rank", "cover-letter"):
+    for cmd in ("init-profile", "analyze", "rank", "cover-letter", "rescore"):
         assert cmd in subparsers.choices
         assert callable(subparsers.choices[cmd].get_default("func"))
 
@@ -167,6 +167,124 @@ def test_track_logs_application(tmp_path, monkeypatch, capsys):
     assert record["score"] == 67  # python + sql of python/sql/kubernetes
     assert "kubernetes" in record["missing_skills"]
     assert "Logged application" in capsys.readouterr().out
+
+
+def _track_acme(tmp_path, monkeypatch):
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, posting_path = _write_profile_and_posting(tmp_path)
+    rc = main(
+        [
+            "track",
+            str(posting_path),
+            "--profile",
+            str(profile_path),
+            "--company",
+            "Acme",
+            "--role",
+            "Backend Dev",
+        ]
+    )
+    assert rc == 0
+    return profile_path, posting_path
+
+
+def _read_log(tmp_path):
+    import json
+
+    return json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+
+
+def test_rescore_updates_score_after_profile_change(tmp_path, monkeypatch, capsys):
+    # Issue #62: the profile gains kubernetes after tracking, so the
+    # stored 67 is stale — rescore re-runs the match against the
+    # current profile.
+    profile_path, _ = _track_acme(tmp_path, monkeypatch)
+    assert _read_log(tmp_path)[0]["score"] == 67
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "Test Dev",
+                "headline": "Software engineering student",
+                "skills": ["python", "sql", "docker", "kubernetes"],
+                "experience": ["automated deployments"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["rescore", "--profile", str(profile_path)])
+    assert rc == 0
+    record = _read_log(tmp_path)[0]
+    assert record["score"] == 100
+    assert "kubernetes" in record["matched_skills"]
+    assert record["missing_skills"] == []
+    assert "67/100 -> 100/100" in capsys.readouterr().out
+
+
+def test_rescore_updates_score_and_hash_after_posting_change(tmp_path, monkeypatch):
+    # The posting drops kubernetes, so the stored score is stale the
+    # other way — rescore also refreshes the hash, so the record stops
+    # showing as changed.
+    from applymap.cli import _posting_changed
+
+    _, posting_path = _track_acme(tmp_path, monkeypatch)
+    posting_path.write_text("Backend developer: Python and SQL.",
+                            encoding="utf-8")
+    rc = main(["rescore"])
+    assert rc == 0
+    record = _read_log(tmp_path)[0]
+    assert record["score"] == 100
+    assert _posting_changed(record) is False
+
+
+def test_rescore_skips_missing_posting_file(tmp_path, monkeypatch, capsys):
+    # A deleted posting file is skipped, not an error — the record keeps
+    # its old score.
+    _, posting_path = _track_acme(tmp_path, monkeypatch)
+    posting_path.unlink()
+    rc = main(["rescore"])
+    assert rc == 0
+    assert _read_log(tmp_path)[0]["score"] == 67
+    assert "Skipped 1 application(s)" in capsys.readouterr().out
+
+
+def test_rescore_single_application_leaves_others_alone(tmp_path, monkeypatch):
+    profile_path, posting_path = _track_acme(tmp_path, monkeypatch)
+    other = tmp_path / "other.txt"
+    other.write_text("Frontend developer: React and TypeScript.",
+                     encoding="utf-8")
+    rc = main(
+        [
+            "track",
+            str(other),
+            "--profile",
+            str(profile_path),
+            "--company",
+            "Beta",
+            "--role",
+            "Frontend Dev",
+        ]
+    )
+    assert rc == 0
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "Test Dev",
+                "headline": "Software engineering student",
+                "skills": ["python", "sql", "docker", "kubernetes"],
+                "experience": ["automated deployments"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc = main(["rescore", "--company", "Acme", "--role", "Backend Dev",
+               "--profile", str(profile_path)])
+    assert rc == 0
+    entries = _read_log(tmp_path)
+    assert entries[0]["score"] == 100
+    assert entries[1]["score"] == 0  # react/typescript, none in the profile
 
 
 def test_track_appends_to_existing_log(tmp_path, monkeypatch):
