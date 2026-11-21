@@ -475,3 +475,12 @@ def test_extract_hugging_face_alias():
     found = matcher.extract_required_skills(
         "Experience with Hugging Face transformers preferred.")
     assert "huggingface" in found
+
+
+def test_phrase_pattern_is_cached():
+    # Ranking a posting reuses the same phrases for every skill check;
+    # the compiled pattern must be built once per phrase, not once per use.
+    first = matcher._phrase_pattern("spring boot")
+    second = matcher._phrase_pattern("spring boot")
+    assert first is second
+    assert matcher._phrase_pattern("machine learning") is not first
