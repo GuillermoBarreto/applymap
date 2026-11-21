@@ -6,6 +6,7 @@ No API calls here: this runs fully offline using token-based matching.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Dict, List, Set, Tuple
 
 # Common tech tokens applymap can recognize in a posting. Matches are
@@ -151,6 +152,7 @@ def tokenize(text: str) -> Set[str]:
 _TOKEN_CHAR = r"[a-z0-9+#./-]"
 
 
+@lru_cache(maxsize=None)
 def _phrase_pattern(phrase: str) -> "re.Pattern":
     """Regex matching phrase as a standalone phrase, not a substring.
 
@@ -158,6 +160,9 @@ def _phrase_pattern(phrase: str) -> "re.Pattern":
     token: "spring boot." and "React.js." match, while a dot followed
     by a token character ("spring boot.js", "react.jsx") still blocks
     the match (issue #43).
+
+    Cached: ranking a posting reuses the same phrases for every skill
+    check, and recompiling ~200 patterns per posting added up.
     """
     return re.compile(
         rf"(?<!{_TOKEN_CHAR}){re.escape(phrase)}(?![a-z0-9+#/-]|\.+{_TOKEN_CHAR})"
