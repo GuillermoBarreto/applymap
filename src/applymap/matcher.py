@@ -130,6 +130,28 @@ def canonicalize(skill: str) -> str:
     return SKILL_ALIASES.get(key, key)
 
 
+# A trailing version number on a token ("python3", "c++17", "vue3") is
+# still the same skill: postings constantly write "Python3" or "C++17",
+# and the bare token never matched those spellings.
+_VERSION_SUFFIX = re.compile(r"^(.*?)(\d+(?:\.\d+)*)$")
+
+
+def _version_base(token: str) -> str | None:
+    """The skill a version-suffixed token names, or None.
+
+    Only strips when the remainder is a known skill ("python3" ->
+    "python"); "s3" stays "s3" because "s" is not a skill, and "ec2"
+    stays "ec2" for the same reason.
+    """
+    match = _VERSION_SUFFIX.match(token)
+    if match is None:
+        return None
+    base = match.group(1)
+    if base and canonicalize(base) in SKILL_TOKENS:
+        return canonicalize(base)
+    return None
+
+
 # A few SKILL_TOKENS are also ordinary English words. Bare "go" and
 # "rest" count as skills only in tech-ish spellings — "Go"/"GO" for the
 # language, "REST" for the API style (issue #6). Unambiguous surface
@@ -197,6 +219,9 @@ def extract_required_skills(posting: str) -> List[str]:
     lowered = posting.lower()
     # Strip sentence-final dots: "TS." must tokenize as "ts", not "ts.".
     tokens = {t.rstrip(".") for t in tokenize(posting)}
+    # Version-suffixed spellings ("Python3", "C++17") name the same skill
+    # as the bare token, so they match too.
+    tokens |= {base for t in tokens if (base := _version_base(t)) is not None}
     found = []
     # Scan both canonical tokens and known aliases; aliases resolve to
     # their canonical form below.
@@ -237,6 +262,9 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
         t.rstrip(".")
         for t in re.findall(r"[a-z0-9][a-z0-9+#./\-]*", lowered)
     ]
+    # Same version-suffix rule as extract_required_skills, so the counts
+    # always agree with what the extractor found.
+    tokens += [base for t in tokens if (base := _version_base(t)) is not None]
     # Case-preserving tokens, for the gated skills above: the lowered
     # tokens can't tell "Go" the language from "go" the English word.
     raw_tokens = [

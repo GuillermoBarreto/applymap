@@ -484,3 +484,28 @@ def test_phrase_pattern_is_cached():
     second = matcher._phrase_pattern("spring boot")
     assert first is second
     assert matcher._phrase_pattern("machine learning") is not first
+
+
+def test_extract_finds_version_suffixed_skills():
+    posting = "Python3 and C++17 experience; Vue3 and HTML5 a plus."
+    found = matcher.extract_required_skills(posting)
+    assert "python" in found
+    assert "c++" in found
+    assert "vue" in found
+    assert "html" in found
+
+
+def test_extract_version_suffix_needs_a_known_skill():
+    # "s3" and "ec2" are skills in their own right: stripping their
+    # trailing digit must not invent "s" or "ec".
+    found = matcher.extract_required_skills("S3 and EC2 on AWS.")
+    assert "s3" in found
+    assert "ec2" in found
+    assert "s" not in found
+    assert "ec" not in found
+
+
+def test_skill_mentions_counts_version_suffixed_skills():
+    posting = "Python3 every day. Python3 again."
+    mentions = matcher.skill_mentions(posting, ["python"])
+    assert mentions["python"] == 2
