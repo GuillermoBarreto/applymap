@@ -538,8 +538,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                     # written before those fields existed) is not a
                     # missing field: .get() returns None and join()
                     # raised TypeError, killing the whole export.
-                    "; ".join(e.get("matched_skills") or []),
-                    "; ".join(e.get("missing_skills") or []),
+                    "; ".join(_as_skill_list(e.get("matched_skills"))),
+                    "; ".join(_as_skill_list(e.get("missing_skills"))),
                     e.get("posting", ""),
                     # Records tracked before --notes existed have no notes
                     # field; export an empty cell, not the literal "None".
@@ -549,6 +549,21 @@ def cmd_export(args: argparse.Namespace) -> int:
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
+
+
+def _as_skill_list(value) -> list:
+    """A skill list from a hand-edited log, tolerating a bare string.
+
+    A bare "python" where a list belongs used to iterate character by
+    character in stats and export ("p", "y", ... as skills, "p; y; t; ..."
+    in the CSV). Treat it as one skill; anything else that isn't a list
+    counts as no skills, like a null.
+    """
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return list(value)
+    return []
 
 
 def _most_missing_skills(entries: list, limit: int = 5) -> list:
@@ -561,7 +576,7 @@ def _most_missing_skills(entries: list, limit: int = 5) -> list:
     """
     counts: dict = {}
     for e in entries:
-        for skill in set(e.get("missing_skills") or []):
+        for skill in set(_as_skill_list(e.get("missing_skills"))):
             counts[skill] = counts.get(skill, 0) + 1
     ranked = sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
     return [{"skill": skill, "count": count}

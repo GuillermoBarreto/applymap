@@ -2167,3 +2167,52 @@ def test_init_profile_template_has_no_exact_ticket_count(tmp_path):
     text = out.read_text(encoding="utf-8")
     assert "2,579" not in text
     assert "thousands of support tickets" in text
+
+
+def test_export_string_skill_list_is_one_skill_not_characters(tmp_path, monkeypatch):
+    # A hand-edited log with a bare string where a skill list belongs
+    # used to shred into characters in the CSV ("p; y; t; ..."); it is
+    # one skill.
+    import csv
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [{"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+              "score": 67, "status": "applied",
+              "matched_skills": "python", "missing_skills": "kubernetes"}]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    out = tmp_path / "apps.csv"
+    assert main(["export", "--csv", str(out)]) == 0
+    rows = list(csv.reader(out.read_text(encoding="utf-8").splitlines()))
+    assert rows[1][5] == "python"
+    assert rows[1][6] == "kubernetes"
+
+
+def test_stats_string_skill_list_counts_as_one_skill(tmp_path, monkeypatch, capsys):
+    # Same bare-string shape in stats: "kubernetes" must count once as a
+    # missing skill, not as ten one-letter skills.
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [{"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+              "score": 67, "status": "applied",
+              "missing_skills": "kubernetes"}]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "kubernetes: missing from 1 application(s)" in out
+    assert "k: missing from" not in out
