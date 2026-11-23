@@ -2288,3 +2288,68 @@ def test_export_writes_blank_cell_for_boolean_score(tmp_path, monkeypatch):
     # Newest first: Beta (80) then Acme (blank, not "True").
     assert rows[1][4] == "80"
     assert rows[2][4] == ""
+
+
+def _write_mixed_case_status_log(tmp_path):
+    # A hand-edited log where statuses were typed "Applied" and
+    # " INTERVIEW " instead of the lowercase values track writes.
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-01", "company": "Acme", "role": "Backend Dev",
+                 "posting": "p.txt", "score": 70,
+                 "matched_skills": ["python"], "missing_skills": [],
+                 "notes": "", "status": "Applied"},
+                {"date": "2026-10-05", "company": "Beta", "role": "SDE",
+                 "posting": "p2.txt", "score": 80,
+                 "matched_skills": ["python"], "missing_skills": [],
+                 "notes": "", "status": " INTERVIEW "},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return log
+
+
+def test_stats_counts_mixed_case_statuses(tmp_path, monkeypatch, capsys):
+    # "Applied" used to count as its own status, separate from
+    # "applied", and the funnel missed it entirely.
+    from applymap import cli as cli_mod
+
+    log = _write_mixed_case_status_log(tmp_path)
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "applied: 1" in out
+    assert "interview: 1" in out
+    assert "Applied" not in out
+    assert "1 applied, 1 reached interview" in out
+
+
+def test_followup_flags_mixed_case_applied_status(tmp_path, monkeypatch, capsys):
+    # A record with status "Applied" used to be skipped by followup, so
+    # a stale application never got a nudge.
+    from applymap import cli as cli_mod
+
+    log = _write_mixed_case_status_log(tmp_path)
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["followup", "--days", "0"]) == 0
+    out = capsys.readouterr().out
+    assert "Acme — Backend Dev" in out
+    assert "Beta — SDE" in out
+
+
+def test_applications_status_filter_matches_mixed_case(tmp_path, monkeypatch, capsys):
+    from applymap import cli as cli_mod
+
+    log = _write_mixed_case_status_log(tmp_path)
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["applications", "--status", "applied"]) == 0
+    out = capsys.readouterr().out
+    assert "Acme — Backend Dev" in out
+    assert "Beta — SDE" not in out

@@ -436,6 +436,13 @@ def _load_applications() -> list:
             f"Applications log at {TRACKING_PATH} should be a JSON list of "
             f"records, but contains {type(entries).__name__}."
         )
+    for entry in entries:
+        # A hand-edited status ("Applied", "APPLIED", " applied ") is the
+        # same status: normalize it here so stats, followup, and the
+        # --status filters all see it, instead of silently dropping the
+        # record from the pipeline.
+        if isinstance(entry, dict) and isinstance(entry.get("status"), str):
+            entry["status"] = entry["status"].strip().casefold()
     return entries
 
 
