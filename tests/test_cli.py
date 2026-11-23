@@ -2353,3 +2353,29 @@ def test_applications_status_filter_matches_mixed_case(tmp_path, monkeypatch, ca
     out = capsys.readouterr().out
     assert "Acme — Backend Dev" in out
     assert "Beta — SDE" not in out
+
+
+def test_check_profile_warns_on_duplicate_skill_spellings(tmp_path, capsys):
+    # "k8s" and "kubernetes" match as the same skill, so listing both
+    # is dead weight in the profile.
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h",
+        skills=["k8s", "kubernetes", "python"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "k8s, kubernetes all match as 'kubernetes'" in out
+
+
+def test_check_profile_no_duplicate_warning_without_aliases(tmp_path, capsys):
+    profile_path = _write_sparse_profile(
+        tmp_path, name="T", headline="h",
+        skills=["kubernetes", "python"],
+        experience=["x"], target_roles=["Backend Dev"],
+    )
+    rc = main(["check-profile", "--profile", str(profile_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "same skill under different names" not in out

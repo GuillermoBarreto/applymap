@@ -981,6 +981,23 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
                 "these skills aren't in the matcher's vocabulary and will "
                 f"never match a posting: {', '.join(hints)}"
             )
+    if skills:
+        # Two spellings of one skill ("k8s" and "kubernetes") both match
+        # as the same skill, so one of them is dead weight in the profile.
+        by_canonical: dict = {}
+        for s in skills:
+            by_canonical.setdefault(matcher.canonicalize(s), []).append(s)
+        dupes = {c: names for c, names in by_canonical.items()
+                 if len(names) > 1}
+        if dupes:
+            details = "; ".join(
+                f"{', '.join(names)} all match as '{canon}'"
+                for canon, names in sorted(dupes.items())
+            )
+            warnings.append(
+                "these skills are the same skill under different names "
+                f"and only one counts: {details} — drop the extras."
+            )
     if not prof.get("target_roles"):
         warnings.append("no target_roles listed — add the roles you're aiming for.")
     if not prof.get("experience"):
