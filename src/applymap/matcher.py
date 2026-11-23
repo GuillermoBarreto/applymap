@@ -201,6 +201,53 @@ def _phrase_occurrences(phrase: str, lowered: str) -> int:
     return len(_phrase_pattern(phrase).findall(lowered))
 
 
+# A component word that only appears inside a longer skill name is not a
+# separate requirement: "React Native" is not a posting asking for React
+# (web), the "JS" in "Next JS" is part of the framework name rather than
+# a standalone JavaScript mention, and "Apache Spark" is not asking for
+# bare "Apache". Each entry maps the component skill to the longer skill
+# names that absorb it; the component only counts when it also appears
+# outside those names. ("Spring Boot" is deliberately not here: Boot
+# postings do want Spring. "GitHub Actions" likewise still counts as
+# GitHub — Actions is a feature of GitHub, not a separate tool.)
+_COMPONENT_ABSORBED_BY = {
+    "react": ("react native", "react-native", "reactnative"),
+    "javascript": ("next js", "node js", "vue js", "react js", "angular js"),
+    "apache": ("apache spark", "apache kafka", "apache airflow",
+               "apache hadoop"),
+}
+
+
+def _absorbed_spans(lowered: str, phrases) -> list:
+    """Spans of the longer skill names in lowered text."""
+    spans = []
+    for phrase in phrases:
+        spans.extend(m.span() for m in _phrase_pattern(phrase).finditer(lowered))
+    return spans
+
+
+def _covered(span, spans) -> bool:
+    """True when span sits entirely inside one of the given spans."""
+    return any(start <= span[0] and span[1] <= end for start, end in spans)
+
+
+def _has_standalone_occurrence(lowered: str, skill: str, spans) -> bool:
+    """True when some surface form of skill occurs outside the spans.
+
+    Every spelling that resolves to the skill counts ("js" as well as
+    "javascript"), so a posting that says "JavaScript and Next JS"
+    still credits JavaScript — only the "JS" inside "Next JS" is
+    absorbed.
+    """
+    forms = [f for f in SKILL_TOKENS | set(SKILL_ALIASES)
+             if canonicalize(f) == skill]
+    for form in forms:
+        for match in _phrase_pattern(form).finditer(lowered):
+            if not _covered(match.span(), spans):
+                return True
+    return False
+
+
 def extract_required_skills(posting: str) -> List[str]:
     """Find recognizable skill tokens inside a job posting.
 
@@ -236,7 +283,16 @@ def extract_required_skills(posting: str) -> List[str]:
                 continue
             found.append(skill)
     # Resolve aliases and de-duplicate, keeping sorted order.
-    return sorted({canonicalize(s) for s in found})
+    found = sorted({canonicalize(s) for s in found})
+    # A component skill only ever seen inside a longer skill name is not
+    # a separate requirement (see _COMPONENT_ABSORBED_BY): drop it
+    # unless it also appears on its own elsewhere in the posting.
+    for component, absorbing in _COMPONENT_ABSORBED_BY.items():
+        if component in found and not _has_standalone_occurrence(
+            lowered, component, _absorbed_spans(lowered, absorbing)
+        ):
+            found.remove(component)
+    return found
 
 
 def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
@@ -257,14 +313,21 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
         raise TypeError(f"posting must be a string, got {type(posting).__name__}")
     lowered = posting.lower()
     # Raw token list (not the deduped set from tokenize): duplicates matter
-    # for counting.
-    tokens = [
-        t.rstrip(".")
-        for t in re.findall(r"[a-z0-9][a-z0-9+#./\-]*", lowered)
+    # for counting. Spans ride along so a component skill (see
+    # _COMPONENT_ABSORBED_BY) only counts occurrences outside the longer
+    # skill names that absorb it.
+    token_hits = [
+        (m.group(0).rstrip("."), m.span())
+        for m in re.finditer(r"[a-z0-9][a-z0-9+#./\-]*", lowered)
     ]
+    tokens = [t for t, _ in token_hits]
+    token_spans = [span for _, span in token_hits]
     # Same version-suffix rule as extract_required_skills, so the counts
-    # always agree with what the extractor found.
+    # always agree with what the extractor found. A version-derived base
+    # has no span of its own: it is a standalone spelling ("python3"),
+    # never part of a longer skill name.
     tokens += [base for t in tokens if (base := _version_base(t)) is not None]
+    token_spans += [None] * (len(tokens) - len(token_spans))
     # Case-preserving tokens, for the gated skills above: the lowered
     # tokens can't tell "Go" the language from "go" the English word.
     raw_tokens = [
@@ -292,6 +355,16 @@ def skill_mentions(posting: str, required: List[str]) -> Dict[str, int]:
                 )
             elif " " in form or "/" in form or "." in form:
                 total += _phrase_occurrences(form, lowered)
+            elif canon in _COMPONENT_ABSORBED_BY:
+                # Same rule as extract_required_skills: a token inside a
+                # longer skill name ("react" in "React Native") is not a
+                # mention of the component skill on its own.
+                spans = _absorbed_spans(lowered, _COMPONENT_ABSORBED_BY[canon])
+                total += sum(
+                    1 for t, span in zip(tokens, token_spans)
+                    if t == form
+                    and (span is None or not _covered(span, spans))
+                )
             else:
                 total += sum(1 for t in tokens if t == form)
         mentions[skill] = total

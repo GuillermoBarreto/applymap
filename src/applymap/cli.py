@@ -339,7 +339,7 @@ def cmd_track(args: argparse.Namespace) -> int:
     entries.append(record)
     _save_applications(entries)
     score_txt = (f"{record['score']}/100"
-                 if isinstance(record["score"], (int, float)) else "n/a")
+                 if _is_numeric_score(record["score"]) else "n/a")
     print(f"Logged application ({record['date']}, score {score_txt}) "
           f"to {TRACKING_PATH}")
     return 0
@@ -436,6 +436,13 @@ def _load_applications() -> list:
             f"Applications log at {TRACKING_PATH} should be a JSON list of "
             f"records, but contains {type(entries).__name__}."
         )
+    for entry in entries:
+        # A hand-edited status ("Applied", "APPLIED", " applied ") is the
+        # same status: normalize it here so stats, followup, and the
+        # --status filters all see it, instead of silently dropping the
+        # record from the pipeline.
+        if isinstance(entry, dict) and isinstance(entry.get("status"), str):
+            entry["status"] = entry["status"].strip().casefold()
     return entries
 
 
@@ -488,7 +495,7 @@ def cmd_applications(args: argparse.Namespace) -> int:
         # A null score means the posting had no recognizable skills when
         # it was tracked (issue #10) — "n/a", never "None/100".
         score = e.get("score")
-        score_txt = f"{score}/100" if isinstance(score, (int, float)) else "n/a"
+        score_txt = f"{score}/100" if _is_numeric_score(score) else "n/a"
         line = (f"{e.get('date', '?')}  {score_txt}  "
                 f"{company} — {role}  [{e.get('status', '?')}]")
         if e.get("notes"):
@@ -517,7 +524,11 @@ def cmd_export(args: argparse.Namespace) -> int:
         # Same posting_changed flag `applications --json` adds: an export
         # that drops it hides which stored scores may be stale.
         out.write_text(json.dumps(
-            [{**e, "posting_changed": _posting_changed(e)} for e in entries],
+            [{**e,
+              # A bool score (hand-edited log, issue #66) is not a number:
+              # export null, not true, like the CSV branch blanks the cell.
+              "score": e.get("score") if _is_numeric_score(e.get("score")) else None,
+              "posting_changed": _posting_changed(e)} for e in entries],
             indent=2) + "\n", encoding="utf-8")
     else:
         with open(out, "w", newline="", encoding="utf-8") as fh:
@@ -533,7 +544,9 @@ def cmd_export(args: argparse.Namespace) -> int:
                     e.get("company", ""),
                     e.get("role", ""),
                     e.get("status", ""),
-                    e.get("score", ""),
+                    # A bool score (hand-edited log, issue #66) is not a
+                    # number: export a blank cell, not "True".
+                    e.get("score") if _is_numeric_score(e.get("score")) else "",
                     # A null skill list (hand-edited log, or a record
                     # written before those fields existed) is not a
                     # missing field: .get() returns None and join()
@@ -549,6 +562,17 @@ def cmd_export(args: argparse.Namespace) -> int:
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
+
+
+def _is_numeric_score(value) -> bool:
+    """True for a real fit score; a bool is not a score.
+
+    JSON has no separate boolean/int distinction in isinstance() —
+    True is an int — so a hand-edited `"score": true` used to count as
+    1 in stats and print as "True/100" (issue #66). A bool in that
+    field is a hand-edit mistake, not a score: treat it like no score.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _as_skill_list(value) -> list:
@@ -592,7 +616,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         counts[status] = counts.get(status, 0) + 1
     scores = [
         e["score"] for e in entries
-        if isinstance(e.get("score"), (int, float))
+        if _is_numeric_score(e.get("score"))
     ]
     most_missing = _most_missing_skills(entries)
     if getattr(args, "json", False):
@@ -604,7 +628,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
             top = max(
                 entries,
                 key=lambda e: e.get("score")
-                if isinstance(e.get("score"), (int, float)) else -1,
+                if _is_numeric_score(e.get("score")) else -1,
             )
             best = {"company": top.get("company"), "role": top.get("role"),
                     "score": top.get("score")}
@@ -628,7 +652,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         best = max(
             entries,
             key=lambda e: e.get("score")
-            if isinstance(e.get("score"), (int, float)) else -1,
+            if _is_numeric_score(e.get("score")) else -1,
         )
         company = best.get("company") or "(unknown company)"
         role = best.get("role") or "(unknown role)"
@@ -725,7 +749,7 @@ def cmd_update_status(args: argparse.Namespace) -> int:
             e = entries[i]
             score = e.get("score")
             score_txt = (f"{score}/100"
-                         if isinstance(score, (int, float)) else "n/a")
+                         if _is_numeric_score(score) else "n/a")
             print(f"  {e.get('date', '?')}  {score_txt}  "
                   f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
         print("Re-run with --posting <posting file> to pick one.")
@@ -960,6 +984,23 @@ def cmd_check_profile(args: argparse.Namespace) -> int:
             warnings.append(
                 "these skills aren't in the matcher's vocabulary and will "
                 f"never match a posting: {', '.join(hints)}"
+            )
+    if skills:
+        # Two spellings of one skill ("k8s" and "kubernetes") both match
+        # as the same skill, so one of them is dead weight in the profile.
+        by_canonical: dict = {}
+        for s in skills:
+            by_canonical.setdefault(matcher.canonicalize(s), []).append(s)
+        dupes = {c: names for c, names in by_canonical.items()
+                 if len(names) > 1}
+        if dupes:
+            details = "; ".join(
+                f"{', '.join(names)} all match as '{canon}'"
+                for canon, names in sorted(dupes.items())
+            )
+            warnings.append(
+                "these skills are the same skill under different names "
+                f"and only one counts: {details} — drop the extras."
             )
     if not prof.get("target_roles"):
         warnings.append("no target_roles listed — add the roles you're aiming for.")

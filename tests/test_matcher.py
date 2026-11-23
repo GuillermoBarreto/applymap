@@ -509,3 +509,53 @@ def test_skill_mentions_counts_version_suffixed_skills():
     posting = "Python3 every day. Python3 again."
     mentions = matcher.skill_mentions(posting, ["python"])
     assert mentions["python"] == 2
+
+
+def test_extract_component_skill_not_credited_from_longer_name():
+    # "React Native" is not a posting asking for React (web), the "JS"
+    # in "Next JS"/"Node JS" is part of the framework name rather than a
+    # standalone JavaScript mention, and "Apache Spark" is not asking
+    # for bare "Apache" — each used to leak its component word as a
+    # separate required skill, inflating the required list.
+    assert matcher.extract_required_skills(
+        "React Native developer needed.") == ["react-native"]
+    assert matcher.extract_required_skills(
+        "Next JS developer.") == ["nextjs"]
+    assert matcher.extract_required_skills(
+        "Node JS backend role.") == ["node"]
+    assert matcher.extract_required_skills(
+        "Apache Spark pipelines.") == ["spark"]
+    assert matcher.extract_required_skills(
+        "Apache Kafka and Apache Airflow.") == ["airflow", "kafka"]
+
+
+def test_extract_component_skill_kept_when_it_appears_standalone():
+    # The component still counts when the posting also names it on its
+    # own — only the occurrences inside the longer name are absorbed.
+    found = matcher.extract_required_skills(
+        "We use React and React Native.")
+    assert "react" in found
+    assert "react-native" in found
+    found = matcher.extract_required_skills(
+        "JavaScript and Next JS experience.")
+    assert "javascript" in found
+    assert "nextjs" in found
+    found = matcher.extract_required_skills("Apache, Spark and Kafka.")
+    assert "apache" in found
+    assert "spark" in found
+    assert "kafka" in found
+
+
+def test_skill_mentions_ignores_component_inside_longer_name():
+    # Mention counts have to agree with the extractor: "React Native"
+    # twice is two react-native mentions and zero react mentions.
+    mentions = matcher.skill_mentions(
+        "React Native and React Native again.",
+        ["react", "react-native"])
+    assert mentions["react"] == 0
+    assert mentions["react-native"] == 2
+    mentions = matcher.skill_mentions(
+        "Next JS role with Node JS work.", ["javascript", "nextjs", "node"])
+    assert mentions["javascript"] == 0
+    assert mentions["nextjs"] == 1
+    assert mentions["node"] == 1

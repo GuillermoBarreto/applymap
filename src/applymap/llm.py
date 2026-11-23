@@ -23,9 +23,17 @@ def _config() -> Optional[Dict[str, str]]:
     api_key = os.environ.get("APPLYMAP_API_KEY", "").strip()
     if not api_key:
         return None
+    # A blank base URL falls back to the default, like the model below:
+    # a whitespace-only value used to slip through as "" and send
+    # requests to the relative URL "/chat/completions".
+    base_url = (
+        os.environ.get("APPLYMAP_API_BASE", "https://api.openai.com/v1")
+        .strip().rstrip("/")
+        or "https://api.openai.com/v1"
+    )
     return {
         "api_key": api_key,
-        "base_url": os.environ.get("APPLYMAP_API_BASE", "https://api.openai.com/v1").strip().rstrip("/"),
+        "base_url": base_url,
         # The key and base URL are stripped (issue #46); the model was
         # not, so a pasted model name with trailing whitespace 404'd as
         # an unknown model. A blank value falls back to the default.
