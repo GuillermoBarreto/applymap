@@ -339,7 +339,7 @@ def cmd_track(args: argparse.Namespace) -> int:
     entries.append(record)
     _save_applications(entries)
     score_txt = (f"{record['score']}/100"
-                 if isinstance(record["score"], (int, float)) else "n/a")
+                 if _is_numeric_score(record["score"]) else "n/a")
     print(f"Logged application ({record['date']}, score {score_txt}) "
           f"to {TRACKING_PATH}")
     return 0
@@ -488,7 +488,7 @@ def cmd_applications(args: argparse.Namespace) -> int:
         # A null score means the posting had no recognizable skills when
         # it was tracked (issue #10) — "n/a", never "None/100".
         score = e.get("score")
-        score_txt = f"{score}/100" if isinstance(score, (int, float)) else "n/a"
+        score_txt = f"{score}/100" if _is_numeric_score(score) else "n/a"
         line = (f"{e.get('date', '?')}  {score_txt}  "
                 f"{company} — {role}  [{e.get('status', '?')}]")
         if e.get("notes"):
@@ -533,7 +533,9 @@ def cmd_export(args: argparse.Namespace) -> int:
                     e.get("company", ""),
                     e.get("role", ""),
                     e.get("status", ""),
-                    e.get("score", ""),
+                    # A bool score (hand-edited log, issue #66) is not a
+                    # number: export a blank cell, not "True".
+                    e.get("score") if _is_numeric_score(e.get("score")) else "",
                     # A null skill list (hand-edited log, or a record
                     # written before those fields existed) is not a
                     # missing field: .get() returns None and join()
@@ -549,6 +551,17 @@ def cmd_export(args: argparse.Namespace) -> int:
                 ])
     print(f"Wrote {len(entries)} application(s) to {args.csv} ({args.format})")
     return 0
+
+
+def _is_numeric_score(value) -> bool:
+    """True for a real fit score; a bool is not a score.
+
+    JSON has no separate boolean/int distinction in isinstance() —
+    True is an int — so a hand-edited `"score": true` used to count as
+    1 in stats and print as "True/100" (issue #66). A bool in that
+    field is a hand-edit mistake, not a score: treat it like no score.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _as_skill_list(value) -> list:
@@ -592,7 +605,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         counts[status] = counts.get(status, 0) + 1
     scores = [
         e["score"] for e in entries
-        if isinstance(e.get("score"), (int, float))
+        if _is_numeric_score(e.get("score"))
     ]
     most_missing = _most_missing_skills(entries)
     if getattr(args, "json", False):
@@ -604,7 +617,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
             top = max(
                 entries,
                 key=lambda e: e.get("score")
-                if isinstance(e.get("score"), (int, float)) else -1,
+                if _is_numeric_score(e.get("score")) else -1,
             )
             best = {"company": top.get("company"), "role": top.get("role"),
                     "score": top.get("score")}
@@ -628,7 +641,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
         best = max(
             entries,
             key=lambda e: e.get("score")
-            if isinstance(e.get("score"), (int, float)) else -1,
+            if _is_numeric_score(e.get("score")) else -1,
         )
         company = best.get("company") or "(unknown company)"
         role = best.get("role") or "(unknown role)"
@@ -725,7 +738,7 @@ def cmd_update_status(args: argparse.Namespace) -> int:
             e = entries[i]
             score = e.get("score")
             score_txt = (f"{score}/100"
-                         if isinstance(score, (int, float)) else "n/a")
+                         if _is_numeric_score(score) else "n/a")
             print(f"  {e.get('date', '?')}  {score_txt}  "
                   f"[{e.get('status', '?')}]  {e.get('posting', '?')}")
         print("Re-run with --posting <posting file> to pick one.")
