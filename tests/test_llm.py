@@ -48,6 +48,18 @@ def test_config_strips_model_whitespace(monkeypatch):
     assert llm._config()["model"] == "gpt-4o-mini"
 
 
+def test_config_blank_base_url_falls_back_to_default(monkeypatch):
+    # A whitespace-only APPLYMAP_API_BASE used to slip through as "" and
+    # send requests to the relative URL "/chat/completions"; the model
+    # already fell back to its default on a blank value, the base URL
+    # did not.
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    monkeypatch.setenv("APPLYMAP_API_BASE", "   ")
+    assert llm._config()["base_url"] == "https://api.openai.com/v1"
+    monkeypatch.delenv("APPLYMAP_API_BASE")
+    assert llm._config()["base_url"] == "https://api.openai.com/v1"
+
+
 def test_chat_returns_assistant_text(monkeypatch):
     monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
     monkeypatch.setenv("APPLYMAP_API_BASE", "https://example.invalid/v1")
