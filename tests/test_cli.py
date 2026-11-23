@@ -2290,6 +2290,21 @@ def test_export_writes_blank_cell_for_boolean_score(tmp_path, monkeypatch):
     assert rows[2][4] == ""
 
 
+def test_export_json_writes_null_for_boolean_score(tmp_path, monkeypatch):
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = _write_bool_score_log(tmp_path)
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    out = tmp_path / "apps.json"
+    assert main(["export", "--csv", str(out), "--format", "json"]) == 0
+    records = json.loads(out.read_text(encoding="utf-8"))
+    # Newest first: Beta (80) then Acme (null, not true).
+    assert records[0]["score"] == 80
+    assert records[1]["score"] is None
+
+
 def _write_mixed_case_status_log(tmp_path):
     # A hand-edited log where statuses were typed "Applied" and
     # " INTERVIEW " instead of the lowercase values track writes.

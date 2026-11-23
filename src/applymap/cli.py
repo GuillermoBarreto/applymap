@@ -524,7 +524,11 @@ def cmd_export(args: argparse.Namespace) -> int:
         # Same posting_changed flag `applications --json` adds: an export
         # that drops it hides which stored scores may be stale.
         out.write_text(json.dumps(
-            [{**e, "posting_changed": _posting_changed(e)} for e in entries],
+            [{**e,
+              # A bool score (hand-edited log, issue #66) is not a number:
+              # export null, not true, like the CSV branch blanks the cell.
+              "score": e.get("score") if _is_numeric_score(e.get("score")) else None,
+              "posting_changed": _posting_changed(e)} for e in entries],
             indent=2) + "\n", encoding="utf-8")
     else:
         with open(out, "w", newline="", encoding="utf-8") as fh:
