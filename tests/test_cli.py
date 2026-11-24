@@ -61,6 +61,27 @@ def test_cover_letter_requires_key(tmp_path, capsys, monkeypatch):
     assert "APPLYMAP_API_KEY" in capsys.readouterr().out
 
 
+def test_rank_text_rows_show_mention_depth(tmp_path, capsys):
+    # Two postings tied at 100: the text rows must show the depth that
+    # ordered them, or the order looks arbitrary.
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump({"name": "Test", "skills": ["python"]}),
+        encoding="utf-8",
+    )
+    shallow = tmp_path / "shallow.txt"
+    shallow.write_text("We need python.", encoding="utf-8")
+    deep = tmp_path / "deep.txt"
+    deep.write_text("Python python python! Python everywhere.",
+                    encoding="utf-8")
+    rc = main(["rank", str(shallow), str(deep),
+               "--profile", str(profile_path)])
+    assert rc == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert "deep" in lines[0] and "depth 4" in lines[0]
+    assert "shallow" in lines[1] and "depth 1" in lines[1]
+
+
 def test_rank_orders_postings(tmp_path, capsys):
     profile_path, _ = _write_profile_and_posting(tmp_path)
     good = tmp_path / "good.txt"
@@ -167,6 +188,30 @@ def test_track_logs_application(tmp_path, monkeypatch, capsys):
     assert record["score"] == 67  # python + sql of python/sql/kubernetes
     assert "kubernetes" in record["missing_skills"]
     assert "Logged application" in capsys.readouterr().out
+
+
+def test_track_logs_application_with_no_recognizable_skills(tmp_path, monkeypatch, capsys):
+    # A posting with no recognizable skills still gets logged (score
+    # null) — the warning must say so instead of implying nothing was
+    # recorded.
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "posting.txt"
+    posting_path.write_text(
+        "We need a friendly person with great communication skills.",
+        encoding="utf-8",
+    )
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Greeter"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "still logged" in out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    assert entries[0]["score"] is None
 
 
 def test_track_appends_to_existing_log(tmp_path, monkeypatch):
