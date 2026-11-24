@@ -190,6 +190,30 @@ def test_track_logs_application(tmp_path, monkeypatch, capsys):
     assert "Logged application" in capsys.readouterr().out
 
 
+def test_track_logs_application_with_no_recognizable_skills(tmp_path, monkeypatch, capsys):
+    # A posting with no recognizable skills still gets logged (score
+    # null) — the warning must say so instead of implying nothing was
+    # recorded.
+    import json
+    from applymap import cli as cli_mod
+
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", tmp_path / "applications.json")
+    profile_path, _ = _write_profile_and_posting(tmp_path)
+    posting_path = tmp_path / "posting.txt"
+    posting_path.write_text(
+        "We need a friendly person with great communication skills.",
+        encoding="utf-8",
+    )
+    rc = main(["track", str(posting_path), "--profile", str(profile_path),
+               "--company", "Acme", "--role", "Greeter"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "still logged" in out
+    entries = json.loads((tmp_path / "applications.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    assert entries[0]["score"] is None
+
+
 def test_track_appends_to_existing_log(tmp_path, monkeypatch):
     import json
     from applymap import cli as cli_mod

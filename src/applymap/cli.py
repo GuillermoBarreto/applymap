@@ -316,9 +316,12 @@ def cmd_track(args: argparse.Namespace) -> int:
     report = matcher.match(prof["skills"], matcher.extract_required_skills(posting))
     if not report["required"]:
         # A None score from "no recognizable skills" is not a real
-        # mismatch — say so instead of logging a meaningless score.
+        # mismatch — say so instead of logging a meaningless score. The
+        # record below is still saved (score null); the old wording
+        # implied nothing was logged at all.
         print("(No recognizable tech skills found in the posting — "
-              "no fit score was recorded.)")
+              "no fit score was recorded, but the application is "
+              "still logged.)")
     record = {
         "date": _track_date(args.date),
         "company": args.company or "",
