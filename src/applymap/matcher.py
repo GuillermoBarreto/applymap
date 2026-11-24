@@ -383,6 +383,12 @@ def match(profile_skills: List[str], required: List[str]) -> Dict[str, object]:
     indistinguishable from a true 0% fit (issue #10).
     """
     have = {canonicalize(s) for s in profile_skills}
+    # A versioned profile skill ("python3", "c++17") names the same skill
+    # as the bare posting spelling (issue #68): the posting side already
+    # expands version suffixes in extract_required_skills, but the profile
+    # side never did, so match(["python3"], ["python"]) scored 0/100.
+    have |= {base for s in profile_skills
+             if (base := _version_base(canonicalize(s))) is not None}
     req = list(dict.fromkeys(canonicalize(s) for s in required))  # de-duplicate, keep order
     matched = [s for s in req if s in have]
     missing = [s for s in req if s not in have]

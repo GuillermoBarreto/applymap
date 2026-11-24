@@ -486,6 +486,24 @@ def test_phrase_pattern_is_cached():
     assert matcher._phrase_pattern("machine learning") is not first
 
 
+def test_match_versioned_profile_skills_match_bare_posting_skills():
+    # Issue #68: the posting side already expanded version suffixes, but
+    # the profile side never did, so a profile listing "python3" scored
+    # 0/100 against a posting asking for "python".
+    report = matcher.match(["python3"], ["python"])
+    assert report["score"] == 100
+    assert report["matched"] == ["python"]
+    assert report["missing"] == []
+    report = matcher.match(["c++17", "vue3"], ["c++", "vue"])
+    assert report["score"] == 100
+    # "s3" stays itself: stripping its digit would invent "s", which is
+    # not a skill — same guard as the posting side.
+    report = matcher.match(["s3"], ["s3"])
+    assert report["score"] == 100
+    report = matcher.match(["s3"], ["python"])
+    assert report["score"] == 0
+
+
 def test_extract_finds_version_suffixed_skills():
     posting = "Python3 and C++17 experience; Vue3 and HTML5 a plus."
     found = matcher.extract_required_skills(posting)
