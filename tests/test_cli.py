@@ -61,6 +61,27 @@ def test_cover_letter_requires_key(tmp_path, capsys, monkeypatch):
     assert "APPLYMAP_API_KEY" in capsys.readouterr().out
 
 
+def test_rank_text_rows_show_mention_depth(tmp_path, capsys):
+    # Two postings tied at 100: the text rows must show the depth that
+    # ordered them, or the order looks arbitrary.
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump({"name": "Test", "skills": ["python"]}),
+        encoding="utf-8",
+    )
+    shallow = tmp_path / "shallow.txt"
+    shallow.write_text("We need python.", encoding="utf-8")
+    deep = tmp_path / "deep.txt"
+    deep.write_text("Python python python! Python everywhere.",
+                    encoding="utf-8")
+    rc = main(["rank", str(shallow), str(deep),
+               "--profile", str(profile_path)])
+    assert rc == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert "deep" in lines[0] and "depth 4" in lines[0]
+    assert "shallow" in lines[1] and "depth 1" in lines[1]
+
+
 def test_rank_orders_postings(tmp_path, capsys):
     profile_path, _ = _write_profile_and_posting(tmp_path)
     good = tmp_path / "good.txt"

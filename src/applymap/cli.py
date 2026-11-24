@@ -206,8 +206,13 @@ def cmd_rank(args: argparse.Namespace) -> int:
         for r in ranked:
             score_txt = (f"{r['score']:>3}/100"
                          if r["score"] is not None else "  n/a")
+            # The tie-breaker is mention depth (rank_postings sorts equal
+            # scores by it), but the rows never showed it — two postings
+            # at the same score looked arbitrarily ordered.
+            depth_txt = (f", depth {r['depth']}"
+                         if r.get("depth") is not None else "")
             print(f"{score_txt}  {r['label']}  "
-                  f"({len(r['matched'])}/{len(r['required'])} skills)")
+                  f"({len(r['matched'])}/{len(r['required'])} skills{depth_txt})")
         if hidden:
             print(f"({len(hidden)} posting(s) below --min-score {args.min_score} hidden)")
         if limited:

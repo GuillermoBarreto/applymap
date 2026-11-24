@@ -425,6 +425,10 @@ def rank_postings(
         # analyze --json already includes mentions; rank --json used to
         # drop them even though they were computed here for tie-breaking.
         report["mentions"] = mentions
+        # The depth itself is the tie-breaker: keep it on the report so
+        # callers (rank's text rows, --json) can show why equal scores
+        # ordered the way they did instead of looking arbitrary.
+        report["depth"] = depth
         scored.append((report, depth))
     scored.sort(
         key=lambda pair: (

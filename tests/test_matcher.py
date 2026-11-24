@@ -221,10 +221,15 @@ def test_rank_higher_score_still_beats_mention_depth():
 
 def test_rank_tiebreak_keeps_report_schema_unchanged():
     # The tie-break must not add new keys to the report dicts beyond
-    # mentions, which rank reports now carry like analyze reports do.
+    # mentions and depth, which rank reports now carry like analyze
+    # reports do — depth is what the tie-break sorts on, so it belongs
+    # on the report for callers to show.
     ranked = matcher.rank_postings(["python"], [("a", "python"), ("b", "python python")])
     assert set(ranked[0]) == {"score", "no_requirements", "matched",
-                             "missing", "required", "label", "mentions"}
+                             "missing", "required", "label", "mentions",
+                             "depth"}
+    assert ranked[0]["depth"] == 2  # "python python"
+    assert ranked[1]["depth"] == 1
 
 
 def test_extract_finds_devops_stack_tokens():
