@@ -445,11 +445,21 @@ def _load_applications() -> list:
             f"records, but contains {type(entries).__name__}."
         )
     for entry in entries:
+        if not isinstance(entry, dict):
+            # A stray string or number in the log used to surface later as
+            # a bare AttributeError in stats, applications, export, and
+            # followup (e.get(...) on a non-dict). Name the file and the
+            # fix here, like the corrupt-JSON case above.
+            raise RuntimeError(
+                f"Applications log at {TRACKING_PATH} contains a record "
+                f"that is not an object ({type(entry).__name__}). Fix or "
+                "remove that record, then try again."
+            )
         # A hand-edited status ("Applied", "APPLIED", " applied ") is the
         # same status: normalize it here so stats, followup, and the
         # --status filters all see it, instead of silently dropping the
         # record from the pipeline.
-        if isinstance(entry, dict) and isinstance(entry.get("status"), str):
+        if isinstance(entry.get("status"), str):
             entry["status"] = entry["status"].strip().casefold()
     return entries
 

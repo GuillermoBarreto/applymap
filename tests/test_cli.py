@@ -334,6 +334,21 @@ def test_applications_non_list_log_is_friendly_error(tmp_path, monkeypatch, caps
     assert "should be a JSON list" in capsys.readouterr().err
 
 
+def test_applications_non_object_record_is_friendly_error(tmp_path, monkeypatch, capsys):
+    # A stray string in the log used to surface later as a bare
+    # AttributeError in stats/applications/export/followup (e.get(...) on
+    # a non-dict). It now fails at load with the file and the fix named,
+    # like the corrupt-JSON case.
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text('["not a record"]', encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["applications"])
+    assert rc == 1
+    assert "is not an object (str)" in capsys.readouterr().err
+
+
 def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
     from applymap import cli as cli_mod
 
