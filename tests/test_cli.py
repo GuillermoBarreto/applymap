@@ -1836,6 +1836,42 @@ def test_export_null_skill_lists_writes_blank_columns(tmp_path, monkeypatch):
     assert rows[1][5] == "" and rows[1][6] == ""
 
 
+def test_stats_and_export_drop_non_string_skills(tmp_path, monkeypatch, capsys):
+    # A hand-edited log with a non-string entry in a skill list (5, true)
+    # used to crash stats — the tie-break sort compared the int against
+    # real skill names and raised TypeError — and export died the same way
+    # in "; ".join(). Only real text is a skill; the rest is dropped.
+    import csv
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps([
+            {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+             "score": 67, "status": "applied",
+             "matched_skills": ["python"], "missing_skills": [5, "python"]},
+            {"date": "2026-10-11", "company": "Globex", "role": "SDE",
+             "score": 82, "status": "interview",
+             "matched_skills": [True], "missing_skills": ["rust"]},
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "python: missing from 1 application(s)" in out
+    assert "rust: missing from 1 application(s)" in out
+    out_csv = tmp_path / "apps.csv"
+    assert main(["export", "--csv", str(out_csv)]) == 0
+    rows = list(csv.reader(out_csv.read_text(encoding="utf-8").splitlines()))
+    # Newest first: Globex (matched [True] -> blank, missing rust),
+    # then Acme (missing 5 dropped, python kept).
+    assert rows[1][5] == "" and rows[1][6] == "rust"
+    assert rows[2][5] == "python" and rows[2][6] == "python"
+
+
 def test_init_profile_to_directory_is_friendly_error(tmp_path, capsys):
     # Pointing --path at an existing directory used to dump a raw
     # IsADirectoryError traceback; main() now catches OSError.

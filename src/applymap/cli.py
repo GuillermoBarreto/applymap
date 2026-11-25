@@ -589,12 +589,16 @@ def _as_skill_list(value) -> list:
     A bare "python" where a list belongs used to iterate character by
     character in stats and export ("p", "y", ... as skills, "p; y; t; ..."
     in the CSV). Treat it as one skill; anything else that isn't a list
-    counts as no skills, like a null.
+    counts as no skills, like a null. A non-string entry inside the list
+    (a hand-edited 5 or true) is dropped the same way: it used to reach
+    stats, where the tie-break sort compared it against real skill names
+    and raised TypeError, and export, where join() raised the same way.
+    Only real text is a skill.
     """
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):
-        return list(value)
+        return [item for item in value if isinstance(item, str)]
     return []
 
 
