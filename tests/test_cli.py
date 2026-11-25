@@ -2016,6 +2016,35 @@ def test_applications_no_flag_when_posting_unchanged(tmp_path, monkeypatch, caps
     assert entries[0]["posting_changed"] is False
 
 
+def test_applications_no_flag_for_non_string_posting_or_hash(tmp_path, monkeypatch, capsys):
+    # A hand-edited posting path that isn't text (a number in the log)
+    # raised TypeError inside _read_posting and crashed applications
+    # --json; a non-string stored hash compared unequal to every computed
+    # hash and flagged every record as changed. Both now report False,
+    # like a missing file or a missing hash.
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps([
+            {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+             "score": 67, "status": "applied", "posting": 12345,
+             "posting_sha256": "deadbeef"},
+            {"date": "2026-10-11", "company": "Globex", "role": "SDE",
+             "score": 82, "status": "interview", "posting": "postings/x.txt",
+             "posting_sha256": 12345},
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["applications", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert entries[0]["posting_changed"] is False
+    assert entries[1]["posting_changed"] is False
+
+
 def test_applications_log_is_a_directory_is_friendly_error(tmp_path, monkeypatch, capsys):
     """A directory sitting at the applications log path used to surface
     as a raw "[Errno 21] Is a directory" message."""

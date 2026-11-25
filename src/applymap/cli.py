@@ -470,13 +470,19 @@ def _posting_changed(entry: dict) -> bool:
     the application was logged, so the stored score may be stale.
     Records without a hash, and files that can no longer be read,
     report False: no hash means nothing to compare against, and a
-    missing file is not a changed posting."""
+    missing file is not a changed posting. A hand-edited posting path
+    that isn't text (a number in the log) raises TypeError inside
+    _read_posting, not one of the file errors below — treat it as
+    unreadable too, instead of crashing applications --json and export.
+    A non-string stored hash is the same story: nothing to compare
+    against, so it reports False like a missing hash.
+    """
     stored_sha = entry.get("posting_sha256")
-    if not stored_sha:
+    if not stored_sha or not isinstance(stored_sha, str):
         return False
     try:
         text = _read_posting(entry.get("posting") or "")
-    except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError):
+    except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError, TypeError):
         return False
     return hashlib.sha256(text.encode("utf-8")).hexdigest() != stored_sha
 
