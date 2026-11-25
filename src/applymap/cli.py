@@ -445,11 +445,21 @@ def _load_applications() -> list:
             f"records, but contains {type(entries).__name__}."
         )
     for entry in entries:
+        if not isinstance(entry, dict):
+            # A stray string or number in the log used to surface later as
+            # a bare AttributeError in stats, applications, export, and
+            # followup (e.get(...) on a non-dict). Name the file and the
+            # fix here, like the corrupt-JSON case above.
+            raise RuntimeError(
+                f"Applications log at {TRACKING_PATH} contains a record "
+                f"that is not an object ({type(entry).__name__}). Fix or "
+                "remove that record, then try again."
+            )
         # A hand-edited status ("Applied", "APPLIED", " applied ") is the
         # same status: normalize it here so stats, followup, and the
         # --status filters all see it, instead of silently dropping the
         # record from the pipeline.
-        if isinstance(entry, dict) and isinstance(entry.get("status"), str):
+        if isinstance(entry.get("status"), str):
             entry["status"] = entry["status"].strip().casefold()
     return entries
 
@@ -460,13 +470,19 @@ def _posting_changed(entry: dict) -> bool:
     the application was logged, so the stored score may be stale.
     Records without a hash, and files that can no longer be read,
     report False: no hash means nothing to compare against, and a
-    missing file is not a changed posting."""
+    missing file is not a changed posting. A hand-edited posting path
+    that isn't text (a number in the log) raises TypeError inside
+    _read_posting, not one of the file errors below — treat it as
+    unreadable too, instead of crashing applications --json and export.
+    A non-string stored hash is the same story: nothing to compare
+    against, so it reports False like a missing hash.
+    """
     stored_sha = entry.get("posting_sha256")
-    if not stored_sha:
+    if not stored_sha or not isinstance(stored_sha, str):
         return False
     try:
         text = _read_posting(entry.get("posting") or "")
-    except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError):
+    except (FileNotFoundError, OSError, RuntimeError, UnicodeDecodeError, TypeError):
         return False
     return hashlib.sha256(text.encode("utf-8")).hexdigest() != stored_sha
 
@@ -589,12 +605,16 @@ def _as_skill_list(value) -> list:
     A bare "python" where a list belongs used to iterate character by
     character in stats and export ("p", "y", ... as skills, "p; y; t; ..."
     in the CSV). Treat it as one skill; anything else that isn't a list
-    counts as no skills, like a null.
+    counts as no skills, like a null. A non-string entry inside the list
+    (a hand-edited 5 or true) is dropped the same way: it used to reach
+    stats, where the tie-break sort compared it against real skill names
+    and raised TypeError, and export, where join() raised the same way.
+    Only real text is a skill.
     """
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):
-        return list(value)
+        return [item for item in value if isinstance(item, str)]
     return []
 
 

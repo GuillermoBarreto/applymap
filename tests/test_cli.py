@@ -334,6 +334,21 @@ def test_applications_non_list_log_is_friendly_error(tmp_path, monkeypatch, caps
     assert "should be a JSON list" in capsys.readouterr().err
 
 
+def test_applications_non_object_record_is_friendly_error(tmp_path, monkeypatch, capsys):
+    # A stray string in the log used to surface later as a bare
+    # AttributeError in stats/applications/export/followup (e.get(...) on
+    # a non-dict). It now fails at load with the file and the fix named,
+    # like the corrupt-JSON case.
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text('["not a record"]', encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["applications"])
+    assert rc == 1
+    assert "is not an object (str)" in capsys.readouterr().err
+
+
 def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
     from applymap import cli as cli_mod
 
@@ -1836,6 +1851,42 @@ def test_export_null_skill_lists_writes_blank_columns(tmp_path, monkeypatch):
     assert rows[1][5] == "" and rows[1][6] == ""
 
 
+def test_stats_and_export_drop_non_string_skills(tmp_path, monkeypatch, capsys):
+    # A hand-edited log with a non-string entry in a skill list (5, true)
+    # used to crash stats — the tie-break sort compared the int against
+    # real skill names and raised TypeError — and export died the same way
+    # in "; ".join(). Only real text is a skill; the rest is dropped.
+    import csv
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps([
+            {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+             "score": 67, "status": "applied",
+             "matched_skills": ["python"], "missing_skills": [5, "python"]},
+            {"date": "2026-10-11", "company": "Globex", "role": "SDE",
+             "score": 82, "status": "interview",
+             "matched_skills": [True], "missing_skills": ["rust"]},
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "python: missing from 1 application(s)" in out
+    assert "rust: missing from 1 application(s)" in out
+    out_csv = tmp_path / "apps.csv"
+    assert main(["export", "--csv", str(out_csv)]) == 0
+    rows = list(csv.reader(out_csv.read_text(encoding="utf-8").splitlines()))
+    # Newest first: Globex (matched [True] -> blank, missing rust),
+    # then Acme (missing 5 dropped, python kept).
+    assert rows[1][5] == "" and rows[1][6] == "rust"
+    assert rows[2][5] == "python" and rows[2][6] == "python"
+
+
 def test_init_profile_to_directory_is_friendly_error(tmp_path, capsys):
     # Pointing --path at an existing directory used to dump a raw
     # IsADirectoryError traceback; main() now catches OSError.
@@ -1963,6 +2014,35 @@ def test_applications_no_flag_when_posting_unchanged(tmp_path, monkeypatch, caps
     assert main(["applications", "--json"]) == 0
     entries = json.loads(capsys.readouterr().out)
     assert entries[0]["posting_changed"] is False
+
+
+def test_applications_no_flag_for_non_string_posting_or_hash(tmp_path, monkeypatch, capsys):
+    # A hand-edited posting path that isn't text (a number in the log)
+    # raised TypeError inside _read_posting and crashed applications
+    # --json; a non-string stored hash compared unequal to every computed
+    # hash and flagged every record as changed. Both now report False,
+    # like a missing file or a missing hash.
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps([
+            {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+             "score": 67, "status": "applied", "posting": 12345,
+             "posting_sha256": "deadbeef"},
+            {"date": "2026-10-11", "company": "Globex", "role": "SDE",
+             "score": 82, "status": "interview", "posting": "postings/x.txt",
+             "posting_sha256": 12345},
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["applications", "--json"]) == 0
+    entries = json.loads(capsys.readouterr().out)
+    assert entries[0]["posting_changed"] is False
+    assert entries[1]["posting_changed"] is False
 
 
 def test_applications_log_is_a_directory_is_friendly_error(tmp_path, monkeypatch, capsys):
