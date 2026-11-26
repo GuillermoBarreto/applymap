@@ -361,6 +361,36 @@ def test_chat_retries_once_on_503_then_succeeds(monkeypatch):
     assert fake.call_count == 2
 
 
+def test_retry_delay_rejects_nan_retry_after():
+    # Issue #71: float("nan") parses fine but survives min/max
+    # unchanged, and time.sleep(nan) raises ValueError — so a
+    # "Retry-After: nan" header used to crash the retry instead of
+    # waiting the 1s fallback.
+    err = _http_error(429, "Too Many Requests", retry_after="nan")
+    assert llm._retry_delay_seconds(err) == 1.0
+    assert llm._retry_delay_seconds(_http_error(
+        429, "Too Many Requests", retry_after="inf")) == 1.0
+    assert llm._retry_delay_seconds(_http_error(
+        429, "Too Many Requests", retry_after="2.5")) == 2.5
+
+
+def test_chat_retries_with_nan_retry_after(monkeypatch):
+    """A NaN Retry-After falls back to the 1s wait; the retry still runs."""
+    import time
+
+    monkeypatch.setenv("APPLYMAP_API_KEY", "test-key")
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+    err = _http_error(429, "Too Many Requests", retry_after="nan")
+    with mock.patch(
+        "urllib.request.urlopen",
+        side_effect=[err, _FakeResponse(_api_body("after retry"))],
+    ) as fake:
+        assert llm.chat("be helpful", "hi") == "after retry"
+    assert fake.call_count == 2
+    assert sleeps == [1.0]
+
+
 def test_chat_still_fails_after_second_429(monkeypatch):
     """Only one retry: a persistent rate limit still surfaces as an error."""
     import time

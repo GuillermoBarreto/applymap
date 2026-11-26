@@ -890,6 +890,39 @@ def test_stats_json_empty_log_reports_zeros(tmp_path, monkeypatch, capsys):
                     "best_fit": None, "most_missing_skills": []}
 
 
+def test_stats_ignores_non_finite_scores(tmp_path, monkeypatch, capsys):
+    # json.loads accepts NaN/Infinity literals, so a hand-edited log can
+    # carry one; round(nan) raises ValueError and round(inf) raises
+    # OverflowError, so a single bad row used to crash `applymap stats`.
+    import json
+
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-11-20", "company": "Acme", "role": "Backend Dev",
+                 "score": float("nan"), "status": "applied"},
+                {"date": "2026-11-21", "company": "Beta", "role": "SDE",
+                 "score": float("inf"), "status": "applied"},
+                {"date": "2026-11-22", "company": "Gamma", "role": "SDE",
+                 "score": 80, "status": "applied"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "Average fit score: 80/100" in out
+    assert "Best fit: Gamma — SDE (80/100)" in out
+    assert main(["stats", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["average_score"] == 80
+    assert data["best_fit"]["score"] == 80
+
+
 def test_parser_has_stats_subcommand():
     assert "stats" in build_parser()._subparsers._group_actions[0].choices
 
