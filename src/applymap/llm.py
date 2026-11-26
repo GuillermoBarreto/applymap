@@ -8,6 +8,7 @@ background. No keys are ever stored — the env var is read at call time.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 import urllib.error
@@ -53,6 +54,11 @@ def _retry_delay_seconds(exc: urllib.error.HTTPError) -> float:
     try:
         delay = float(headers.get("Retry-After", 1.0))
     except (AttributeError, TypeError, ValueError):
+        return 1.0
+    # NaN parses fine but survives min/max unchanged, and time.sleep(nan)
+    # raises ValueError — so a "Retry-After: nan" header used to crash
+    # the retry instead of waiting. A non-finite delay is no delay at all.
+    if not math.isfinite(delay):
         return 1.0
     return min(max(delay, 0.0), 10.0)
 
