@@ -8,6 +8,7 @@ import datetime
 import difflib
 import hashlib
 import json
+import math
 import os
 import sys
 import tempfile
@@ -595,8 +596,14 @@ def _is_numeric_score(value) -> bool:
     True is an int — so a hand-edited `"score": true` used to count as
     1 in stats and print as "True/100" (issue #66). A bool in that
     field is a hand-edit mistake, not a score: treat it like no score.
+
+    NaN and Infinity parse from a hand-edited log too (json.loads
+    accepts both literals), but they are not scores either: round(nan)
+    raises ValueError and round(inf) OverflowError, so one bad row used
+    to crash `applymap stats`. Only a finite number counts as a score.
     """
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
 
 
 def _as_skill_list(value) -> list:
