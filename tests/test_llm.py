@@ -374,6 +374,27 @@ def test_retry_delay_rejects_nan_retry_after():
         429, "Too Many Requests", retry_after="2.5")) == 2.5
 
 
+def test_retry_delay_honors_http_date_retry_after():
+    # Retry-After may be an HTTP-date instead of delay-seconds (RFC
+    # 7231): a date header used to fall through to the 1s fallback,
+    # retrying minutes before the server asked us to.
+    import time
+    from email.utils import formatdate
+
+    soon = formatdate(time.time() + 5, usegmt=True)
+    delay = llm._retry_delay_seconds(_http_error(
+        429, "Too Many Requests", retry_after=soon))
+    assert 4.0 <= delay <= 5.0
+    far = formatdate(time.time() + 3600, usegmt=True)
+    assert llm._retry_delay_seconds(_http_error(
+        429, "Too Many Requests", retry_after=far)) == 10.0
+    past = formatdate(time.time() - 60, usegmt=True)
+    assert llm._retry_delay_seconds(_http_error(
+        429, "Too Many Requests", retry_after=past)) == 0.0
+    assert llm._retry_delay_seconds(_http_error(
+        429, "Too Many Requests", retry_after="not a date")) == 1.0
+
+
 def test_chat_retries_with_nan_retry_after(monkeypatch):
     """A NaN Retry-After falls back to the 1s wait; the retry still runs."""
     import time

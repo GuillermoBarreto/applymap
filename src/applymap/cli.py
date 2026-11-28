@@ -488,6 +488,17 @@ def _posting_changed(entry: dict) -> bool:
     return hashlib.sha256(text.encode("utf-8")).hexdigest() != stored_sha
 
 
+def _sort_date(entry: dict) -> str:
+    """Sort key for tracked-application dates, newest first.
+
+    A hand-edited log can hold a non-string date (a bare 20261127):
+    comparing it against real "YYYY-MM-DD" strings raises TypeError
+    and crashes `applications` and `export`. Coerce to text so the
+    sort stays deterministic; the record itself is untouched.
+    """
+    return str(entry.get("date") or "")
+
+
 def cmd_applications(args: argparse.Namespace) -> int:
     """List tracked applications, newest first, optionally filtered by status."""
     entries = _load_applications()
@@ -496,7 +507,7 @@ def cmd_applications(args: argparse.Namespace) -> int:
     # Newest first, same order as the text listing below — the JSON
     # output used to come back in raw insertion order, which disagreed
     # with what `applications` prints.
-    entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
+    entries = sorted(entries, key=_sort_date, reverse=True)
     if args.changed:
         # Only the ones whose posting was edited after tracking: those
         # are the records whose stored score may be stale.
@@ -514,7 +525,7 @@ def cmd_applications(args: argparse.Namespace) -> int:
         else:
             print("No applications tracked yet. Log one with `applymap track`.")
         return 0
-    for e in sorted(entries, key=lambda e: e.get("date") or "", reverse=True):
+    for e in sorted(entries, key=_sort_date, reverse=True):
         company = e.get("company") or "(unknown company)"
         role = e.get("role") or "(unknown role)"
         # A null score means the posting had no recognizable skills when
@@ -540,7 +551,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     # Newest first, same as `applications` prints and `applications --json`
     # returns: the export used to come back in raw insertion order, which
     # disagreed with both (issue #36).
-    entries = sorted(entries, key=lambda e: e.get("date") or "", reverse=True)
+    entries = sorted(entries, key=_sort_date, reverse=True)
     # Expand ~ like `rank --csv`, so `--csv ~/apps.csv` doesn't create a
     # literal "~" directory; create missing parent folders too.
     out = Path(args.csv).expanduser()
@@ -616,10 +627,12 @@ def _as_skill_list(value) -> list:
     (a hand-edited 5 or true) is dropped the same way: it used to reach
     stats, where the tie-break sort compared it against real skill names
     and raised TypeError, and export, where join() raised the same way.
-    Only real text is a skill.
+    Only real text is a skill. A bare "" is no skills, not one skill
+    named "": it used to count as a missing skill in stats' most-missing
+    list.
     """
     if isinstance(value, str):
-        return [value]
+        return [value] if value else []
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str)]
     return []

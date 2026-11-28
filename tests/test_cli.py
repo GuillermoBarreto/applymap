@@ -349,6 +349,34 @@ def test_applications_non_object_record_is_friendly_error(tmp_path, monkeypatch,
     assert "is not an object (str)" in capsys.readouterr().err
 
 
+def test_applications_tolerates_non_string_date(tmp_path, monkeypatch, capsys):
+    # A hand-edited log with a bare numeric date used to crash the
+    # newest-first sort with TypeError (int vs str comparison) in both
+    # `applications` and `export`. Both list the record instead.
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": 20261127, "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied"},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    assert main(["applications"]) == 0
+    out = capsys.readouterr().out
+    assert "Acme" in out and "Globex" in out
+    out_csv = tmp_path / "out.csv"
+    assert main(["export", "--csv", str(out_csv)]) == 0
+    assert "Acme" in out_csv.read_text(encoding="utf-8")
+
+
 def test_track_corrupted_log_is_friendly_error(tmp_path, monkeypatch, capsys):
     from applymap import cli as cli_mod
 
@@ -2312,6 +2340,34 @@ def test_stats_json_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
     assert data["most_missing_skills"] == [
         {"skill": "kubernetes", "count": 2},
         {"skill": "graphql", "count": 1},
+    ]
+
+
+def test_stats_ignores_empty_string_missing_skills(tmp_path, monkeypatch, capsys):
+    # A hand-edited missing_skills of "" used to count as one missing
+    # skill named "" in the most-missing list; it is no skills at all.
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied", "missing_skills": ""},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview",
+                 "missing_skills": ["kubernetes"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["most_missing_skills"] == [
+        {"skill": "kubernetes", "count": 1},
     ]
 
 
