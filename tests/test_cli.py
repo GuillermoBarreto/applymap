@@ -2343,6 +2343,34 @@ def test_stats_json_reports_most_missing_skills(tmp_path, monkeypatch, capsys):
     ]
 
 
+def test_stats_ignores_empty_string_missing_skills(tmp_path, monkeypatch, capsys):
+    # A hand-edited missing_skills of "" used to count as one missing
+    # skill named "" in the most-missing list; it is no skills at all.
+    import json
+    from applymap import cli as cli_mod
+
+    log = tmp_path / "applications.json"
+    log.write_text(
+        json.dumps(
+            [
+                {"date": "2026-10-10", "company": "Acme", "role": "Backend Dev",
+                 "score": 67, "status": "applied", "missing_skills": ""},
+                {"date": "2026-10-12", "company": "Globex", "role": "SDE",
+                 "score": 82, "status": "interview",
+                 "missing_skills": ["kubernetes"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod, "TRACKING_PATH", log)
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["most_missing_skills"] == [
+        {"skill": "kubernetes", "count": 1},
+    ]
+
+
 def test_init_profile_template_has_no_exact_ticket_count(tmp_path):
     # The shipped template is public-facing; it should describe the
     # experience the way examples/profile.example.yaml does, without an

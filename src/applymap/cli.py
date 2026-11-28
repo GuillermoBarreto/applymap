@@ -627,10 +627,12 @@ def _as_skill_list(value) -> list:
     (a hand-edited 5 or true) is dropped the same way: it used to reach
     stats, where the tie-break sort compared it against real skill names
     and raised TypeError, and export, where join() raised the same way.
-    Only real text is a skill.
+    Only real text is a skill. A bare "" is no skills, not one skill
+    named "": it used to count as a missing skill in stats' most-missing
+    list.
     """
     if isinstance(value, str):
-        return [value]
+        return [value] if value else []
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str)]
     return []
