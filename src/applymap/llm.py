@@ -13,6 +13,8 @@ import os
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Optional
 
 
@@ -51,10 +53,23 @@ def _retry_delay_seconds(exc: urllib.error.HTTPError) -> float:
     """Wait before retrying a 429/5xx, honoring Retry-After when the
     server sent one. Capped so a bad header can't stall the CLI."""
     headers = getattr(exc, "headers", None) or {}
+    raw = headers.get("Retry-After", 1.0)
     try:
-        delay = float(headers.get("Retry-After", 1.0))
+        delay = float(raw)
     except (AttributeError, TypeError, ValueError):
-        return 1.0
+        # Retry-After may be an HTTP-date instead of delay-seconds
+        # (RFC 7231): a date header used to fall through to the 1s
+        # fallback, retrying minutes before the server asked us to.
+        # Honor it when it parses; a garbage value still waits 1s.
+        try:
+            when = parsedate_to_datetime(str(raw))
+        except (TypeError, ValueError, OverflowError):
+            return 1.0
+        if when is None:
+            return 1.0
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        delay = (when - datetime.now(timezone.utc)).total_seconds()
     # NaN parses fine but survives min/max unchanged, and time.sleep(nan)
     # raises ValueError — so a "Retry-After: nan" header used to crash
     # the retry instead of waiting. A non-finite delay is no delay at all.
